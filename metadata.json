@@ -1,0 +1,8 @@
+{
+  "name": "Frobex Broker",
+  "description": "Interactive crypto trading, copy trading, AI bots, and asset management platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
