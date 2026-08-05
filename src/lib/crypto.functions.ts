@@ -16,7 +16,7 @@ export const proxyCryptoPrices = createServerFn({ method: "GET" })
     const binanceSymbols = cleanSymbols.filter((s) => s !== "USDTUSDT");
     if (binanceSymbols.length === 0) return [];
 
-    let results: any[] = [];
+    const results: any[] = [];
 
     // Try Binance Primary Endpoint
     try {

@@ -1,5 +1,7 @@
 -- ============ SECURITY QUESTIONS & USER SECURITY ANSWERS ============
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TABLE IF NOT EXISTS public.user_security_answers (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -17,9 +19,13 @@ GRANT ALL ON public.user_security_answers TO service_role;
 
 ALTER TABLE public.user_security_answers ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "usa_self_select" ON public.user_security_answers;
+DROP POLICY IF EXISTS "usa_self_insert" ON public.user_security_answers;
+DROP POLICY IF EXISTS "usa_self_update" ON public.user_security_answers;
+
 CREATE POLICY "usa_self_select" ON public.user_security_answers
   FOR SELECT TO authenticated
-  USING (user_id = auth.uid() OR public.has_role(auth.uid(), 'admin'));
+  USING (user_id = auth.uid());
 
 CREATE POLICY "usa_self_insert" ON public.user_security_answers
   FOR INSERT TO authenticated
@@ -40,7 +46,7 @@ CREATE OR REPLACE FUNCTION public.verify_security_answers_and_reset_password(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, extensions
 AS $$
 DECLARE
   v_user_id uuid;
@@ -123,3 +129,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_user_security_questions(text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.verify_security_answers_and_reset_password(text, text, text, text) TO anon, authenticated;
+
+-- Force PostgREST to reload schema cache properly
+SELECT pg_notify('pgrst', 'reload schema');
+

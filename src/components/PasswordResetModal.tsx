@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { saveSecurityQuestions } from "@/lib/security.functions";
 import {
   Dialog,
   DialogContent,
@@ -297,6 +298,24 @@ export function SetSecurityQuestionsModal({
 
     setSaving(true);
     try {
+      // 1. Try resilient server function using service role
+      const res = await saveSecurityQuestions({
+        data: {
+          userId,
+          question_1: q1,
+          answer_1: a1,
+          question_2: q2,
+          answer_2: a2,
+        },
+      });
+
+      if (res && res.success) {
+        toast.success("Security questions saved securely to Supabase cloud!");
+        onOpenChange(false);
+        return;
+      }
+
+      // 2. Fallback to client upsert
       const { error } = await supabase.from("user_security_answers" as any).upsert(
         {
           user_id: userId,
