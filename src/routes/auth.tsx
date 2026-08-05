@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/Navbar";
 import { toast } from "sonner";
+import { PasswordResetModal } from "@/components/PasswordResetModal";
 import {
   Loader as Loader2,
   TrendingUp,
@@ -27,6 +28,7 @@ import {
   Star,
   ArrowUpRight,
   ArrowDownRight,
+  KeyRound,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -74,6 +76,7 @@ function AuthPage() {
   const [referralCode, setReferralCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastAttempt, setLastAttempt] = useState(0);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
 
   const returnTo = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
 
@@ -304,7 +307,19 @@ function AuthPage() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="password">Password</Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="password">Password</Label>
+                        {tab === "signin" && (
+                          <button
+                            type="button"
+                            onClick={() => setResetModalOpen(true)}
+                            className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
+                          >
+                            <KeyRound className="h-3 w-3" />
+                            Forgot Password?
+                          </button>
+                        )}
+                      </div>
                       <Input
                         id="password"
                         type="password"
@@ -338,6 +353,12 @@ function AuthPage() {
           </div>
         </div>
       </section>
+
+      <PasswordResetModal
+        open={resetModalOpen}
+        onOpenChange={setResetModalOpen}
+        defaultEmail={email}
+      />
 
       {/* WHY CHOOSE SOLEN TRADES */}
       <section className="border-b border-border bg-surface/30">

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { proxyCryptoPrices } from "../lib/crypto.functions";
 
 export type Ticker = {
   symbol: string;
@@ -89,65 +90,31 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
       }));
     };
 
-    // 1. Fetch via Binance REST API + Coinbase/CoinGecko fallback
+    // 1. Fetch via Server-Side Proxy
     const fetchRestPrices = async () => {
       if (document.hidden) return;
+      // Prepare USDT default
+      updateTicker("USDTUSDT", 1.0, 0, 1.0, 1.0, 1000000);
+
+      const binanceSymbols = cleanSymbols.filter((s) => s !== "USDTUSDT");
+      if (binanceSymbols.length === 0) return;
+
       try {
-        // Prepare USDT default
-        updateTicker("USDTUSDT", 1.0, 0, 1.0, 1.0, 1000000);
-
-        const binanceSymbols = cleanSymbols.filter((s) => s !== "USDTUSDT");
-        if (binanceSymbols.length === 0) return;
-
-        const binanceUrl = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(
-          JSON.stringify(binanceSymbols),
-        )}`;
-
-        const res = await fetch(binanceUrl);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            data.forEach((d: any) => {
-              if (d && d.symbol) {
-                updateTicker(
-                  d.symbol,
-                  Number(d.lastPrice),
-                  Number(d.priceChangePercent),
-                  Number(d.highPrice),
-                  Number(d.lowPrice),
-                  Number(d.volume),
-                );
-              }
-            });
-            setStatus("live");
-            return;
-          }
-        }
-
-        // Secondary Fallback: Coinbase rates
-        const cbRes = await fetch("https://api.coinbase.com/v2/exchange-rates?currency=USD");
-        if (cbRes.ok) {
-          const cbData = await cbRes.json();
-          const rates = cbData?.data?.rates || {};
-          cleanSymbols.forEach((sym) => {
-            const base = sym.replace(/USDT$/, "");
-            if (rates[base]) {
-              const rate = Number(rates[base]);
-              if (rate > 0) {
-                const usdPrice = Number((1 / rate).toFixed(base === "BTC" ? 2 : 4));
-                updateTicker(sym, usdPrice);
-              }
-            }
+        const results = await proxyCryptoPrices({ data: binanceSymbols });
+        if (results && results.length > 0) {
+          results.forEach((r) => {
+            updateTicker(r.symbol, r.price, r.change, r.high, r.low, r.volume);
           });
           setStatus("live");
           return;
         }
+      } catch (e) {
+        // Fallback to local defaults on server error
+      }
 
-        throw new Error("REST price fetch failed");
-      } catch (err) {
-        if (cancelled) return;
+      // Ultimate local fallback prices
+      if (!cancelled) {
         setStatus("error");
-        // Apply fallbacks for missing
         cleanSymbols.forEach((sym) => {
           const fb = FALLBACK_PRICES[sym] || FALLBACK_PRICES["BTCUSDT"];
           if (fb) updateTicker(sym, fb.price, fb.change);
@@ -206,8 +173,8 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
     fetchRestPrices();
     connectWebSocket();
 
-    // Backup polling every 4 seconds
-    pollInterval = setInterval(fetchRestPrices, 4000);
+    // Backup polling every 5 seconds (slightly slower polling via proxy)
+    pollInterval = setInterval(fetchRestPrices, 5000);
 
     const handleVisibility = () => {
       if (!document.hidden) fetchRestPrices();
@@ -223,7 +190,7 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
       }
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [symsKey]);
+  }, [symsKey]); // Use symsKey to avoid exhaustive deps warning and object identity changes
 
   return { tickers, status };
 }

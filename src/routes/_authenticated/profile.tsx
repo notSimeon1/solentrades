@@ -18,6 +18,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { SetSecurityQuestionsModal } from "@/components/PasswordResetModal";
 import {
   Camera,
   Upload,
@@ -37,6 +38,7 @@ import {
   Flame,
   Star,
   CheckCheck,
+  KeyRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -132,6 +134,7 @@ function ProfilePage() {
   const [fullName, setFullName] = useState("");
   const [copiedRef, setCopiedRef] = useState(false);
   const [updatingName, setUpdatingName] = useState(false);
+  const [securityModalOpen, setSecurityModalOpen] = useState(false);
 
   // Avatar states
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
@@ -730,6 +733,30 @@ function ProfilePage() {
                   </Button>
                 )}
               </div>
+
+              {/* Security Questions Reset Setup */}
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-bold flex items-center gap-1.5 text-foreground">
+                      <KeyRound className="h-4 w-4 text-primary" /> Security Questions for Password
+                      Recovery
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Set up secret security questions saved to Supabase Cloud so you can easily
+                      reset your password if forgotten.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-primary/40 text-primary hover:bg-primary/10"
+                    onClick={() => setSecurityModalOpen(true)}
+                  >
+                    Configure Questions
+                  </Button>
+                </div>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
@@ -814,6 +841,14 @@ function ProfilePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {user && (
+        <SetSecurityQuestionsModal
+          userId={user.id}
+          open={securityModalOpen}
+          onOpenChange={setSecurityModalOpen}
+        />
+      )}
     </motion.div>
   );
 }
