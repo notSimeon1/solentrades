@@ -1,12 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
-import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
-
-function db(ctx: ToolContext) {
-  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
-    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+import { getMcpDbClient } from "../db";
+import { defineTool } from "@lovable.dev/mcp-js";
 
 export default defineTool({
   name: "get_my_profile",
@@ -18,7 +11,7 @@ export default defineTool({
   handler: async (_input, ctx) => {
     if (!ctx.isAuthenticated())
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
-    const { data, error } = await db(ctx)
+    const { data, error } = await getMcpDbClient(ctx)
       .from("profiles")
       .select("*")
       .eq("id", ctx.getUserId())

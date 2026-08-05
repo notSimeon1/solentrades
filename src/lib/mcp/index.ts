@@ -7,7 +7,7 @@ import listMyWithdrawals from "./tools/list-my-withdrawals";
 import listMarketNews from "./tools/list-market-news";
 
 // Direct Supabase issuer required (not the .lovable.cloud proxy).
-const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_ID ?? "project-ref-unset";
+const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_ID ?? "dmfdovwiczhpnqlykjix";
 
 export default defineMcp({
   name: "solentrades-mcp",
