@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/lib/auth-context";
@@ -1390,7 +1390,7 @@ function NewsTab({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [impact, setImpact] = useState<"low" | "medium" | "high">("medium");
-  const [source, setSource] = useState("Frobex Desk");
+  const [source, setSource] = useState("Solen Trades Desk");
 
   const publish = async () => {
     if (!title.trim()) return toast.error("Enter a news headline");
@@ -1400,7 +1400,7 @@ function NewsTab({
           title: title.trim(),
           body: body.trim(),
           impact,
-          source: source.trim() || "Frobex Desk",
+          source: source.trim() || "Solen Trades Desk",
         },
       });
       toast.success("Market news published");
@@ -1810,9 +1810,14 @@ const SETTINGS_SECTIONS: SectionDef[] = [
         key: "support_email",
         label: "Support email address",
         type: "text",
-        placeholder: "support@frobex.io",
+        placeholder: "support@solentrades.com",
       },
-      { key: "platform_name", label: "Platform display name", type: "text", placeholder: "Frobex" },
+      {
+        key: "platform_name",
+        label: "Platform display name",
+        type: "text",
+        placeholder: "Solen Trades",
+      },
     ],
   },
 ];
@@ -2527,8 +2532,14 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
   const [userMap, setUserMap] = useState<Record<string, any>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
+  const activeIdRef = useRef<string | null>(null);
   const [search, setSearch] = useState("");
   const [clearing, setClearing] = useState(false);
+
+  // Sync activeIdRef whenever activeId state changes
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
 
   // Sync users from overviewUsers whenever prop updates
   useEffect(() => {
@@ -2564,11 +2575,14 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
       const uniqueThreads = Array.from(userThreadMap.values());
       setThreads(uniqueThreads);
 
+      // Preserve currently selected thread; only auto-select top thread if no thread is active or if current active thread was removed
+      const currentActiveId = activeIdRef.current;
       if (
         uniqueThreads.length > 0 &&
-        (!activeId || !uniqueThreads.some((t) => t.id === activeId))
+        (!currentActiveId || !uniqueThreads.some((t) => t.id === currentActiveId))
       ) {
         setActiveId(uniqueThreads[0].id);
+        activeIdRef.current = uniqueThreads[0].id;
       }
 
       const ids = Array.from(new Set(uniqueThreads.map((t: any) => t.user_id)));
@@ -2654,6 +2668,7 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
       toast.success("All support chats have been reset cleanly!");
       setThreads([]);
       setActiveId(null);
+      activeIdRef.current = null;
       await loadThreads();
     } catch (e: any) {
       toast.error(e.message ?? "Failed to clear support chats");
@@ -2765,6 +2780,7 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
                     key={t.id}
                     onClick={() => {
                       setActiveId(t.id);
+                      activeIdRef.current = t.id;
                       setUnreadCounts((prev) => ({ ...prev, [t.id]: 0 }));
                     }}
                     className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center gap-2.5 min-w-0 ${

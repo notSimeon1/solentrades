@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useBinancePrices } from "@/hooks/useBinancePrices";
 import { soundFX } from "@/lib/sound-engine";
+import { CryptoIcon } from "@/components/CryptoIcon";
 import { VipBadge, getVipTier } from "@/components/VipBadge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ import { motion } from "framer-motion";
 
 export const Route = createFileRoute("/_authenticated/swap")({
   component: InstantSwapPage,
-  head: () => ({ meta: [{ title: "Instant Crypto Swap — Frobex" }] }),
+  head: () => ({ meta: [{ title: "Instant Crypto Swap — Solen Trades" }] }),
 });
 
 type TokenOption = {
@@ -331,20 +332,23 @@ function InstantSwapPage() {
                     MAX
                   </button>
 
-                  <select
-                    value={fromSymbol}
-                    onChange={(e) => {
-                      soundFX.playClick();
-                      setFromSymbol(e.target.value);
-                    }}
-                    className="rounded-xl bg-slate-800 border border-slate-700 text-white font-bold text-sm px-3 py-2 outline-none focus:border-emerald-500 cursor-pointer"
-                  >
-                    {TOKENS.map((t) => (
-                      <option key={t.symbol} value={t.symbol}>
-                        {t.icon} {t.symbol}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-1.5 rounded-xl bg-slate-800 border border-slate-700 px-2 py-1">
+                    <CryptoIcon symbol={fromSymbol} size="sm" />
+                    <select
+                      value={fromSymbol}
+                      onChange={(e) => {
+                        soundFX.playClick();
+                        setFromSymbol(e.target.value);
+                      }}
+                      className="bg-transparent text-white font-bold text-sm outline-none cursor-pointer pr-1"
+                    >
+                      {TOKENS.map((t) => (
+                        <option key={t.symbol} value={t.symbol} className="bg-slate-900 text-white">
+                          {t.symbol} - {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -389,20 +393,23 @@ function InstantSwapPage() {
                     : "0.00"}
                 </div>
 
-                <select
-                  value={toSymbol}
-                  onChange={(e) => {
-                    soundFX.playClick();
-                    setToSymbol(e.target.value);
-                  }}
-                  className="rounded-xl bg-slate-800 border border-slate-700 text-white font-bold text-sm px-3 py-2 outline-none focus:border-emerald-500 cursor-pointer shrink-0"
-                >
-                  {TOKENS.map((t) => (
-                    <option key={t.symbol} value={t.symbol}>
-                      {t.icon} {t.symbol}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-1.5 rounded-xl bg-slate-800 border border-slate-700 px-2 py-1 shrink-0">
+                  <CryptoIcon symbol={toSymbol} size="sm" />
+                  <select
+                    value={toSymbol}
+                    onChange={(e) => {
+                      soundFX.playClick();
+                      setToSymbol(e.target.value);
+                    }}
+                    className="bg-transparent text-white font-bold text-sm outline-none cursor-pointer pr-1"
+                  >
+                    {TOKENS.map((t) => (
+                      <option key={t.symbol} value={t.symbol} className="bg-slate-900 text-white">
+                        {t.symbol} - {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="text-[11px] text-slate-500 font-mono">

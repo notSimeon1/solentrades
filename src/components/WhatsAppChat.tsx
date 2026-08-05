@@ -48,7 +48,7 @@ export function WhatsAppChat({
   threadId,
   userId,
   currentUserRole,
-  recipientName = "Frobex Customer Support",
+  recipientName = "Solen Trades Customer Support",
   recipientStatus = "online",
   quickReplies = [
     "Deposit Help",
@@ -341,7 +341,7 @@ export function WhatsAppChat({
                             <Bot className="h-3 w-3" /> Assistant
                           </>
                         ) : currentUserRole === "user" ? (
-                          "Frobex Support Agent"
+                          "Solen Trades Support Agent"
                         ) : (
                           "Customer"
                         )}

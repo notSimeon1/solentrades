@@ -628,7 +628,7 @@ function Dashboard() {
     <div className="-m-6 min-h-screen space-y-5 bg-background px-6 py-5 text-foreground dark">
       {/* HERO BALANCE + MODE SWITCH */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
-        <Card className="relative overflow-hidden border-0 p-5 sm:p-7 bg-gradient-hero text-primary-foreground shadow-glow">
+        <Card className="relative overflow-hidden border-0 p-5 sm:p-7 bg-gradient-hero text-white shadow-glow">
           <div
             className="absolute inset-0 opacity-30 mix-blend-overlay"
             style={{
@@ -1291,7 +1291,7 @@ function NewsTicker() {
           id: "x",
           title: "Markets open — Fed minutes ahead. Volatility expected on USD pairs.",
           impact: "medium",
-          source: "Frobex Desk",
+          source: "Solen Trades Desk",
         },
       ];
   return (

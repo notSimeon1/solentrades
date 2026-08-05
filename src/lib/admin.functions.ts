@@ -54,7 +54,7 @@ const newsSchema = z.object({
   title: z.string().min(1).max(160),
   body: z.string().max(2000).default(""),
   impact: z.enum(["low", "medium", "high"]).default("medium"),
-  source: z.string().max(120).default("Frobex Desk"),
+  source: z.string().max(120).default("Solen Trades Desk"),
 });
 const docSchema = z.object({ path: z.string().min(1).max(500) });
 const openPositionSchema = z.object({

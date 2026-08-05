@@ -13,7 +13,7 @@ export default defineTool({
   name: "list_market_news",
   title: "List market news",
   description:
-    "Return the latest Frobex market news items posted by the admin (title, body, published time).",
+    "Return the latest Solen Trades market news items posted by the admin (title, body, published time).",
   inputSchema: {
     limit: z.number().int().min(1).max(50).optional(),
   },

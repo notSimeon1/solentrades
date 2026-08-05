@@ -13,7 +13,7 @@ export default defineTool({
   name: "list_my_withdrawals",
   title: "List my withdrawals",
   description:
-    "List the signed-in Frobex user's withdrawal requests and their approval/payout status.",
+    "List the signed-in Solen Trades user's withdrawal requests and their approval/payout status.",
   inputSchema: {
     limit: z.number().int().min(1).max(100).optional(),
   },

@@ -96,7 +96,7 @@ const CurrencyContext = createContext<CurrencyContextValue>({
   formatPrice: (amt) => `$${amt.toFixed(2)}`,
 });
 
-const LOCAL_STORAGE_KEY = "frobex_base_currency";
+const LOCAL_STORAGE_KEY = "solentrades_base_currency";
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();

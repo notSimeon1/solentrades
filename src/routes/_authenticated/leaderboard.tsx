@@ -28,7 +28,7 @@ import { motion } from "framer-motion";
 
 export const Route = createFileRoute("/_authenticated/leaderboard")({
   component: LeaderboardPage,
-  head: () => ({ meta: [{ title: "Trader Leaderboard & Monthly Tournament — Frobex" }] }),
+  head: () => ({ meta: [{ title: "Trader Leaderboard & Monthly Tournament — Solen Trades" }] }),
 });
 
 interface LeaderboardUser {

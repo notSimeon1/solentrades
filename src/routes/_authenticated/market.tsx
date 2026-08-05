@@ -30,6 +30,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAccountMode } from "@/lib/account-mode-context";
 import { useCurrency } from "@/lib/currency-context";
 import { openPosition } from "@/lib/admin.functions";
+import { CryptoIcon } from "@/components/CryptoIcon";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/market")({
@@ -211,12 +212,15 @@ function CoinCard({ sym, ticker: t }: { sym: string; ticker: any }) {
     <Card className="p-4 transition-shadow hover:shadow-md flex flex-col justify-between">
       <div>
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold">{ticker(sym)}</span>
-              <span className="text-[10px] text-muted-foreground font-medium">USDT</span>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <CryptoIcon symbol={ticker(sym)} size="sm" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold">{ticker(sym)}</span>
+                <span className="text-[10px] text-muted-foreground font-medium">USDT</span>
+              </div>
+              <p className="text-xs text-muted-foreground truncate">{LABEL[sym] ?? sym}</p>
             </div>
-            <p className="text-xs text-muted-foreground truncate">{LABEL[sym] ?? sym}</p>
           </div>
           {zero ? (
             <Minus className="mt-0.5 h-4 w-4 text-muted-foreground shrink-0" />

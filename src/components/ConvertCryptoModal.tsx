@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RefreshCw, Sparkles, DollarSign, ArrowRight, ShieldCheck } from "lucide-react";
+import { CryptoIcon } from "@/components/CryptoIcon";
 
 const SUPPORTED_CRYPTO = [
   { symbol: "USDT", name: "Tether USD", icon: "₮", decimals: 2 },
@@ -276,7 +277,7 @@ export function ConvertCryptoModal({
               conversionItems.map((item) => (
                 <div key={item.symbol} className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-amber-400 text-sm">{item.icon}</span>
+                    <CryptoIcon symbol={item.symbol} size="xs" />
                     <span className="font-semibold text-slate-200">
                       {item.qty.toLocaleString(undefined, { maximumFractionDigits: item.decimals })}{" "}
                       {item.symbol}

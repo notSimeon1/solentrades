@@ -13,7 +13,7 @@ export default defineTool({
   name: "list_my_positions",
   title: "List my open positions",
   description:
-    "List the signed-in Frobex user's live trading positions (asset, side, size, entry price, current PnL).",
+    "List the signed-in Solen Trades user's live trading positions (asset, side, size, entry price, current PnL).",
   inputSchema: {
     status: z
       .enum(["open", "closed", "all"])

@@ -258,9 +258,9 @@ export function Navbar() {
             )}
             <Link to="/" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-hero shadow-glow">
-                <TrendingUp className="h-4 w-4 text-primary-foreground" />
+                <TrendingUp className="h-4 w-4 text-white" />
               </div>
-              <span className="text-base font-bold tracking-tight">frobex</span>
+              <span className="text-base font-bold tracking-tight">Solen Trades</span>
             </Link>
           </div>
 
@@ -335,7 +335,7 @@ export function Navbar() {
                         className="h-6 w-6 rounded-full object-cover border border-primary/40"
                       />
                     ) : (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-hero text-[10px] font-bold text-primary-foreground">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white border border-blue-400/40">
                         {(user.email?.[0] ?? "U").toUpperCase()}
                       </div>
                     )}
@@ -426,9 +426,9 @@ export function Navbar() {
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div className="flex items-center gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-hero shadow-glow">
-                    <TrendingUp className="h-4 w-4 text-primary-foreground" />
+                    <TrendingUp className="h-4 w-4 text-white" />
                   </div>
-                  <span className="text-base font-bold tracking-tight">frobex</span>
+                  <span className="text-base font-bold tracking-tight">Solen Trades</span>
                 </div>
                 <button onClick={() => setOpen(false)}>
                   <X className="h-5 w-5" />

@@ -9,9 +9,9 @@ export const Route = createFileRoute("/support")({
   component: SupportPage,
   head: () => ({
     meta: [
-      { title: "Support Live Chat — Frobex" },
-      { name: "description", content: "Chat live with Frobex customer support." },
-      { property: "og:title", content: "Support Live Chat — Frobex" },
+      { title: "Support Live Chat — Solen Trades" },
+      { name: "description", content: "Chat live with Solen Trades customer support." },
+      { property: "og:title", content: "Support Live Chat — Solen Trades" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -57,7 +57,7 @@ function SupportPage() {
             threadId={threadId}
             userId={user.id}
             currentUserRole="user"
-            recipientName="Frobex Customer Support"
+            recipientName="Solen Trades Customer Support"
             recipientStatus="Online • Replies instantly"
             height="h-[700px]"
           />

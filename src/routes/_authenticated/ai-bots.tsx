@@ -36,7 +36,7 @@ export const Route = createFileRoute("/_authenticated/ai-bots")({
   component: AiBotsPage,
   head: () => ({
     meta: [
-      { title: "AI Trading Bots — Frobex" },
+      { title: "AI Trading Bots — Solen Trades" },
       { name: "description", content: "Automated AI trading bots with hourly profit accrual." },
     ],
   }),

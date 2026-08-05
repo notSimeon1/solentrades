@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAccountMode } from "@/lib/account-mode-context";
 import { useCurrency } from "@/lib/currency-context";
 import { ConvertCryptoModal } from "@/components/ConvertCryptoModal";
+import { CryptoIcon } from "@/components/CryptoIcon";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,12 +27,12 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
   head: () => ({
     meta: [
-      { title: "Dashboard — Frobex" },
+      { title: "Dashboard — Solen Trades" },
       {
         name: "description",
-        content: "Your live Frobex trading account and real-time crypto market.",
+        content: "Your live Solen Trades trading account and real-time crypto market.",
       },
-      { property: "og:title", content: "Dashboard — Frobex" },
+      { property: "og:title", content: "Dashboard — Solen Trades" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -80,7 +81,9 @@ function Dashboard() {
   const [market, setMarket] = useState<"spot" | "futures">("spot");
   const [convertModalOpen, setConvertModalOpen] = useState(false);
   const [favs, setFavs] = useState<string[]>(() =>
-    typeof window !== "undefined" ? JSON.parse(localStorage.getItem("frobex_favs") ?? "[]") : [],
+    typeof window !== "undefined"
+      ? JSON.parse(localStorage.getItem("solentrades_favs") ?? "[]")
+      : [],
   );
 
   const { tickers, status } = useBinancePrices(SYMBOLS);
@@ -107,7 +110,8 @@ function Dashboard() {
   const toggleFav = (s: string) => {
     setFavs((prev) => {
       const next = prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s];
-      if (typeof window !== "undefined") localStorage.setItem("frobex_favs", JSON.stringify(next));
+      if (typeof window !== "undefined")
+        localStorage.setItem("solentrades_favs", JSON.stringify(next));
       return next;
     });
   };
@@ -153,7 +157,7 @@ function Dashboard() {
                       className="h-7 w-7 rounded-full object-cover border border-primary/40 shadow-sm"
                     />
                   ) : (
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-hero text-[11px] font-bold text-primary-foreground shadow-sm">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white shadow-sm border border-blue-400/40">
                       {(user?.email?.[0] ?? "U").toUpperCase()}
                     </div>
                   )}
@@ -329,9 +333,7 @@ function TickerRow({
       >
         <Star className={`h-3.5 w-3.5 ${fav ? "fill-primary text-primary" : ""}`} />
       </button>
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-hero text-primary-foreground text-sm font-bold">
-        {meta.icon}
-      </div>
+      <CryptoIcon symbol={sym} size="sm" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-bold truncate">{display}</span>

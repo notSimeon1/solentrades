@@ -13,7 +13,7 @@ export default defineTool({
   name: "list_my_transactions",
   title: "List my transactions",
   description:
-    "List the signed-in Frobex user's recent account transactions (deposits, withdrawals, trades, profits, fees), most recent first.",
+    "List the signed-in Solen Trades user's recent account transactions (deposits, withdrawals, trades, profits, fees), most recent first.",
   inputSchema: {
     limit: z
       .number()

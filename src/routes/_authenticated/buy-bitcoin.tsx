@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_authenticated/buy-bitcoin")({
   component: BuyBitcoinPage,
   head: () => ({
     meta: [
-      { title: "Buy Bitcoin — Frobex" },
+      { title: "Buy Bitcoin — Solen Trades" },
       {
         name: "description",
         content: "Purchase Bitcoin instantly via bank transfer, Zelle, Cash App and more.",
@@ -53,8 +53,8 @@ const FALLBACK_METHODS: PaymentMethod[] = [
     method_key: "cash_app",
     method_name: "Cash App",
     identifier_label: "$Cashtag",
-    recipient_name: "Frobex Treasury",
-    identifier: "$FrobexTreasury",
+    recipient_name: "Solen Trades Treasury",
+    identifier: "$SolenTradesTreasury",
     is_active: true,
   },
   {
@@ -62,8 +62,8 @@ const FALLBACK_METHODS: PaymentMethod[] = [
     method_key: "paypal",
     method_name: "PayPal",
     identifier_label: "Email",
-    recipient_name: "Frobex Treasury",
-    identifier: "deposits@frobex.io",
+    recipient_name: "Solen Trades Treasury",
+    identifier: "deposits@solentrades.com",
     is_active: true,
   },
   {
@@ -71,8 +71,8 @@ const FALLBACK_METHODS: PaymentMethod[] = [
     method_key: "zelle",
     method_name: "Zelle",
     identifier_label: "Phone/Email",
-    recipient_name: "Frobex Treasury",
-    identifier: "deposits@frobex.io",
+    recipient_name: "Solen Trades Treasury",
+    identifier: "deposits@solentrades.com",
     is_active: true,
   },
   {
@@ -80,8 +80,8 @@ const FALLBACK_METHODS: PaymentMethod[] = [
     method_key: "chime",
     method_name: "Chime",
     identifier_label: "Handle",
-    recipient_name: "Frobex Treasury",
-    identifier: "@frobexdeposits",
+    recipient_name: "Solen Trades Treasury",
+    identifier: "@solentradesdeposits",
     is_active: true,
   },
   {
@@ -89,8 +89,8 @@ const FALLBACK_METHODS: PaymentMethod[] = [
     method_key: "applepay",
     method_name: "Apple Pay",
     identifier_label: "Phone",
-    recipient_name: "Frobex Treasury",
-    identifier: "+1 (800) FROBEX-00",
+    recipient_name: "Solen Trades Treasury",
+    identifier: "+1 (800) SOLEN-00",
     is_active: true,
   },
   {
@@ -98,8 +98,8 @@ const FALLBACK_METHODS: PaymentMethod[] = [
     method_key: "venmo",
     method_name: "Venmo",
     identifier_label: "Handle",
-    recipient_name: "Frobex Treasury",
-    identifier: "@FrobexTreasury",
+    recipient_name: "Solen Trades Treasury",
+    identifier: "@SolenTradesTreasury",
     is_active: true,
   },
   {
@@ -107,9 +107,9 @@ const FALLBACK_METHODS: PaymentMethod[] = [
     method_key: "bankwire",
     method_name: "Bank Wire",
     identifier_label: "Account No.",
-    recipient_name: "Frobex Treasury",
+    recipient_name: "Solen Trades Treasury",
     identifier: "7823-4901-0056",
-    memo_note: "Include your Frobex user ID as the wire memo.",
+    memo_note: "Include your Solen Trades user ID as the wire memo.",
     is_active: true,
   },
 ];
@@ -567,8 +567,8 @@ function BuyBitcoinPage() {
               )}
               {!selected.memo_note && (
                 <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-xs text-muted-foreground">
-                  📝 Include your Frobex account email as the payment memo/note so we can match your
-                  deposit instantly.
+                  📝 Include your Solen Trades account email as the payment memo/note so we can
+                  match your deposit instantly.
                 </div>
               )}
             </div>

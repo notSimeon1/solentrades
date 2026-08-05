@@ -12,7 +12,7 @@ export default defineTool({
   name: "get_my_profile",
   title: "Get my profile",
   description:
-    "Return the signed-in Frobex user's profile: name, email, country, KYC status, account mode (demo/live), balances, and AI-trading flag.",
+    "Return the signed-in Solen Trades user's profile: name, email, country, KYC status, account mode (demo/live), balances, and AI-trading flag.",
   inputSchema: {},
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (_input, ctx) => {

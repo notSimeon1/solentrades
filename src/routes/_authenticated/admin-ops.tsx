@@ -41,7 +41,7 @@ const OWNER_EMAIL = "simonosawaru255@gmail.com";
 
 export const Route = createFileRoute("/_authenticated/admin-ops")({
   component: AdminOpsPage,
-  head: () => ({ meta: [{ title: "Admin Ops — Frobex" }] }),
+  head: () => ({ meta: [{ title: "Admin Ops — Solen Trades" }] }),
 });
 
 function AdminOpsPage() {
@@ -569,7 +569,7 @@ function PreMarketTab() {
           <Input
             value={tokenName}
             onChange={(e) => setTokenName(e.target.value)}
-            placeholder="e.g. Frobex Gold"
+            placeholder="e.g. Solen Trades Gold"
           />
         </div>
         <div className="space-y-2">

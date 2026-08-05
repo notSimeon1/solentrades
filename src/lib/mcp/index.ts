@@ -10,11 +10,11 @@ import listMarketNews from "./tools/list-market-news";
 const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_ID ?? "project-ref-unset";
 
 export default defineMcp({
-  name: "frobex-mcp",
-  title: "Frobex",
+  name: "solentrades-mcp",
+  title: "Solen Trades",
   version: "0.1.0",
   instructions:
-    "Frobex is an investment/trading app. These tools read the signed-in user's own account: profile, balances, transactions, open positions, deposits, withdrawals, and market news. All calls run as that user with row-level security enforced.",
+    "Solen Trades is an investment/trading app. These tools read the signed-in user's own account: profile, balances, transactions, open positions, deposits, withdrawals, and market news. All calls run as that user with row-level security enforced.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated",

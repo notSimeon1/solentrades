@@ -42,7 +42,7 @@ export async function getOrCreateUserSupportThread(
       .from("support_threads")
       .insert({
         user_id: userId,
-        subject: "Frobex Customer Support",
+        subject: "Solen Trades Customer Support",
         last_message_at: new Date().toISOString(),
       } as never)
       .select()
@@ -62,7 +62,7 @@ export async function getOrCreateUserSupportThread(
         thread_id: thread.id,
         user_id: userId,
         sender: "bot",
-        body: `Hello ${displayName}! Welcome to Frobex Official 24/7 Live Support. How can our team assist you with your account, deposits, withdrawals, or trading today?`,
+        body: `Hello ${displayName}! Welcome to Solen Trades Official 24/7 Live Support. How can our team assist you with your account, deposits, withdrawals, or trading today?`,
         is_read: true,
       } as never);
     }

@@ -1,4 +1,4 @@
-// Web Audio API Sound Synthesizer Engine for Frobex Trading Platform
+// Web Audio API Sound Synthesizer Engine for Solen Trades Trading Platform
 
 class SoundFXEngine {
   private ctx: AudioContext | null = null;
@@ -6,7 +6,7 @@ class SoundFXEngine {
 
   constructor() {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("frobex_audio_enabled");
+      const saved = localStorage.getItem("solentrades_audio_enabled");
       this.enabled = saved !== "false";
     }
   }
@@ -18,7 +18,7 @@ class SoundFXEngine {
   public setEnabled(enabled: boolean) {
     this.enabled = enabled;
     if (typeof window !== "undefined") {
-      localStorage.setItem("frobex_audio_enabled", String(enabled));
+      localStorage.setItem("solentrades_audio_enabled", String(enabled));
     }
   }
 

@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_authenticated/pre-market")({
   component: PreMarketPage,
   head: () => ({
     meta: [
-      { title: "Pre-Market — Frobex" },
+      { title: "Pre-Market — Solen Trades" },
       { name: "description", content: "Get early access to upcoming token launches." },
     ],
   }),

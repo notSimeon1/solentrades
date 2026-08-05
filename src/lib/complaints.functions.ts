@@ -21,11 +21,11 @@ export const notifyComplaint = createServerFn({ method: "POST" })
 
     const html = `
       <div style="font-family:system-ui,sans-serif;max-width:560px;margin:auto;padding:24px;color:#0b1d3a">
-        <h2 style="margin:0 0 16px;color:#1e3a8a">New Frobex support ticket</h2>
+        <h2 style="margin:0 0 16px;color:#1e3a8a">New Solen Trades support ticket</h2>
         <p style="margin:0 0 8px"><strong>From:</strong> ${escapeHtml(data.name)} &lt;${escapeHtml(data.email)}&gt;</p>
         <p style="margin:0 0 16px"><strong>Subject:</strong> ${escapeHtml(data.subject)}</p>
         <div style="background:#f1f5f9;border-radius:12px;padding:16px;white-space:pre-wrap;font-size:14px;line-height:1.6">${escapeHtml(data.message)}</div>
-        <p style="margin-top:24px;font-size:12px;color:#64748b">This is an automated notification from Frobex.</p>
+        <p style="margin-top:24px;font-size:12px;color:#64748b">This is an automated notification from Solen Trades.</p>
       </div>
     `;
 
@@ -37,10 +37,10 @@ export const notifyComplaint = createServerFn({ method: "POST" })
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "Frobex Support <onboarding@resend.dev>",
+          from: "Solen Trades Support <onboarding@resend.dev>",
           to: [ADMIN_EMAIL],
           reply_to: data.email,
-          subject: `[Frobex] ${data.subject}`,
+          subject: `[Solen Trades] ${data.subject}`,
           html,
         }),
       });

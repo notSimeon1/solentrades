@@ -59,7 +59,7 @@ export const Route = createFileRoute("/.lovable/oauth/consent")({
       </p>
     </main>
   ),
-  head: () => ({ meta: [{ title: "Authorize app · Frobex" }] }),
+  head: () => ({ meta: [{ title: "Authorize app · Solen Trades" }] }),
 });
 
 function Consent() {
@@ -97,14 +97,14 @@ function Consent() {
         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
           <Shield className="h-6 w-6 text-primary" />
         </div>
-        <h1 className="text-xl font-semibold">Connect {clientName} to your Frobex account</h1>
+        <h1 className="text-xl font-semibold">Connect {clientName} to your Solen Trades account</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {clientName} will be able to call Frobex tools while you are signed in — reading your
-          profile, balances, transactions, positions, deposits, withdrawals, and market news.
+          {clientName} will be able to call Solen Trades tools while you are signed in — reading
+          your profile, balances, transactions, positions, deposits, withdrawals, and market news.
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
-          This does not bypass Frobex permissions or row-level security. You can disconnect at any
-          time from the authorized client.
+          This does not bypass Solen Trades permissions or row-level security. You can disconnect at
+          any time from the authorized client.
         </p>
         {error && (
           <p role="alert" className="mt-4 text-sm text-destructive">

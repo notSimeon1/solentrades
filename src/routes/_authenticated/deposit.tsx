@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { CryptoIcon } from "@/components/CryptoIcon";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -47,7 +48,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export const Route = createFileRoute("/_authenticated/deposit")({
   component: DepositPage,
-  head: () => ({ meta: [{ title: "Deposit — Frobex" }] }),
+  head: () => ({ meta: [{ title: "Deposit — Solen Trades" }] }),
 });
 
 type CryptoOption = {
@@ -604,7 +605,7 @@ function DepositPage() {
               >
                 <div className="text-xs font-bold text-amber-300">$2,000 Gold VIP</div>
                 <div className="text-[10px] text-amber-400 font-extrabold mt-0.5">
-                  +100% Match Bonus
+                  +10% Match Bonus
                 </div>
                 <div className="text-[9px] text-amber-300/80">2,000 Leaderboard Pts</div>
               </button>
@@ -623,7 +624,7 @@ function DepositPage() {
               >
                 <div className="text-xs font-bold text-purple-300">$5,000 Whale 🐋</div>
                 <div className="text-[10px] text-purple-400 font-extrabold mt-0.5">
-                  +200% Match Bonus
+                  +20% Match Bonus
                 </div>
                 <div className="text-[9px] text-purple-300/80">5,000 Leaderboard Pts</div>
               </button>
@@ -649,7 +650,7 @@ function DepositPage() {
                 <Trophy className="h-4 w-4 shrink-0 text-amber-400" />
                 <span>
                   Deposits under $1,000 earn <strong>{Number(amount)} Leaderboard Points</strong>{" "}
-                  (0% Cash Bonus). Deposit $1,000+ to unlock % deposit match bonuses!
+                  (0% Cash Bonus). Deposit $1,000+ to unlock 10% deposit match bonuses!
                 </span>
               </div>
             )}
@@ -658,11 +659,11 @@ function DepositPage() {
                 <Sparkles className="h-4 w-4 shrink-0 text-emerald-400" />
                 <span>
                   Eligible for{" "}
-                  <strong>
-                    +{Number(amount) >= 5000 ? 200 : 100}% Instant Deposit Match Bonus
-                  </strong>{" "}
-                  (${(Number(amount) * (Number(amount) >= 5000 ? 2 : 1)).toLocaleString()}) +{" "}
-                  <strong>{Number(amount).toLocaleString()} Leaderboard Points</strong>!
+                  <strong>+{Number(amount) >= 5000 ? 20 : 10}% Instant Deposit Match Bonus</strong>{" "}
+                  (${(Number(amount) * (Number(amount) >= 5000 ? 0.2 : 0.1)).toLocaleString()} bonus
+                  — Total credited: $
+                  {(Number(amount) * (1 + (Number(amount) >= 5000 ? 0.2 : 0.1))).toLocaleString()})
+                  + <strong>{Number(amount).toLocaleString()} Leaderboard Points</strong>!
                 </span>
               </div>
             )}
@@ -744,15 +745,7 @@ function DepositPage() {
                       onClick={() => pickCrypto(c.id)}
                       className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${active ? "border-primary bg-accent/50 shadow-glow" : "border-border bg-surface hover:bg-accent/30"}`}
                     >
-                      <div
-                        className={`flex h-9 w-9 items-center justify-center rounded-lg ${active ? "bg-gradient-hero text-primary-foreground" : "bg-surface-elevated"}`}
-                      >
-                        {c.icon === "btc" ? (
-                          <Bitcoin className="h-4 w-4" />
-                        ) : (
-                          <Coins className="h-4 w-4" />
-                        )}
-                      </div>
+                      <CryptoIcon symbol={c.symbol} size="sm" />
                       <div className="min-w-0">
                         <div className="text-sm font-semibold">
                           {c.symbol}{" "}
@@ -785,7 +778,7 @@ function DepositPage() {
                       className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${active ? "border-primary bg-accent/50 shadow-glow" : "border-border bg-surface hover:bg-accent/30"}`}
                     >
                       <div
-                        className={`flex h-9 w-9 items-center justify-center rounded-lg ${active ? "bg-gradient-hero text-primary-foreground" : "bg-surface-elevated"}`}
+                        className={`flex h-9 w-9 items-center justify-center rounded-lg ${active ? "bg-blue-600 text-white" : "bg-surface-elevated text-foreground"}`}
                       >
                         <Building2 className="h-4 w-4" />
                       </div>
@@ -818,7 +811,7 @@ function DepositPage() {
                 }`}
               >
                 <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${gatewayKind === "giftcard" ? "bg-gradient-hero text-primary-foreground" : "bg-surface-elevated"}`}
+                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${gatewayKind === "giftcard" ? "bg-blue-600 text-white" : "bg-surface-elevated text-foreground"}`}
                 >
                   <Gift className="h-4 w-4" />
                 </div>
@@ -1167,7 +1160,7 @@ function Stepper({ step }: { step: Step }) {
       {items.map((it, i) => (
         <div key={it.id} className="flex flex-1 items-center gap-2">
           <div
-            className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${i <= idx ? "bg-gradient-hero text-primary-foreground" : "bg-surface border border-border text-muted-foreground"}`}
+            className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${i <= idx ? "bg-blue-600 text-white" : "bg-surface border border-border text-muted-foreground"}`}
           >
             {i + 1}
           </div>

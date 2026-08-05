@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useCurrency } from "@/lib/currency-context";
 import { useBinancePrices } from "@/hooks/useBinancePrices";
 import { ConvertCryptoModal } from "@/components/ConvertCryptoModal";
+import { CryptoIcon } from "@/components/CryptoIcon";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,12 +28,12 @@ export const Route = createFileRoute("/_authenticated/assets")({
   component: AssetsPage,
   head: () => ({
     meta: [
-      { title: "My Assets — Frobex" },
+      { title: "My Assets — Solen Trades" },
       {
         name: "description",
         content: "Individual crypto wallets with live valuation and portfolio distribution.",
       },
-      { property: "og:title", content: "My Assets — Frobex" },
+      { property: "og:title", content: "My Assets — Solen Trades" },
       { property: "og:description", content: "Track every crypto wallet balance in one place." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -153,7 +154,7 @@ function AssetsPage() {
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       <div className="flex items-start gap-3">
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-hero shadow-glow">
-          <WalletIcon className="h-5 w-5 text-primary-foreground" />
+          <WalletIcon className="h-5 w-5 text-white" />
         </div>
         <div>
           <h1 className="text-3xl font-bold tracking-tight">My Assets</h1>
@@ -299,9 +300,7 @@ function AssetsPage() {
                 className="rounded-xl border border-border bg-surface p-4"
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-hero text-sm font-bold text-primary-foreground">
-                    {h.icon}
-                  </div>
+                  <CryptoIcon symbol={h.symbol} size="md" />
                   <div className="min-w-0 flex-1">
                     <div className="font-bold">{h.symbol}</div>
                     <div className="text-xs text-muted-foreground">{h.name}</div>

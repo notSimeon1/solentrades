@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { WhatsAppChat } from "@/components/WhatsAppChat";
 import { getOrCreateUserSupportThread } from "@/lib/support-service";
 
-const STORAGE_KEY = "frobex_chat_pos";
+const STORAGE_KEY = "solentrades_chat_pos";
 const BUTTON_SIZE = 56; // px
 const PANEL_WIDTH = 380; // px
 const PANEL_HEIGHT = 560; // px
@@ -315,7 +315,7 @@ export function LiveChatWidget() {
                 threadId={threadId}
                 userId={user.id}
                 currentUserRole="user"
-                recipientName="Frobex Support"
+                recipientName="Solen Trades Support"
                 recipientStatus="Online • Live Agent"
                 height="h-full"
                 compact

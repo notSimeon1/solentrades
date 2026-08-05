@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_authenticated/announcements")({
   component: AnnouncementsPage,
   head: () => ({
     meta: [
-      { title: "Announcements — Frobex" },
+      { title: "Announcements — Solen Trades" },
       { name: "description", content: "Platform announcements and updates." },
     ],
   }),
@@ -28,21 +28,21 @@ const FALLBACK_NEWS = [
     id: "fb1",
     title: "Bitcoin holds above key support as institutional inflows continue",
     impact: "medium",
-    source: "Frobex Desk",
+    source: "Solen Trades Desk",
     created_at: new Date().toISOString(),
   },
   {
     id: "fb2",
     title: "Ethereum network upgrade scheduled — gas fees expected to drop",
     impact: "low",
-    source: "Frobex Desk",
+    source: "Solen Trades Desk",
     created_at: new Date(Date.now() - 3600000).toISOString(),
   },
   {
     id: "fb3",
     title: "Fed meeting minutes ahead — volatility expected across crypto markets",
     impact: "high",
-    source: "Frobex Desk",
+    source: "Solen Trades Desk",
     created_at: new Date(Date.now() - 7200000).toISOString(),
   },
 ];
@@ -131,7 +131,8 @@ function AnnouncementsPage() {
                         {item.content || item.title}
                       </p>
                       <div className="mt-2 text-xs text-muted-foreground">
-                        {new Date(item.created_at).toLocaleString()} — {item.source || "Frobex"}
+                        {new Date(item.created_at).toLocaleString()} —{" "}
+                        {item.source || "Solen Trades"}
                       </div>
                     </div>
                   </div>

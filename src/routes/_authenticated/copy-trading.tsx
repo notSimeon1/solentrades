@@ -31,7 +31,7 @@ export const Route = createFileRoute("/_authenticated/copy-trading")({
   component: CopyTradingPage,
   head: () => ({
     meta: [
-      { title: "Copy Trading — Frobex" },
+      { title: "Copy Trading — Solen Trades" },
       { name: "description", content: "Mirror the trades of elite strategists automatically." },
     ],
   }),

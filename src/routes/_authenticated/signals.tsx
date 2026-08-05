@@ -12,9 +12,9 @@ export const Route = createFileRoute("/_authenticated/signals")({
   component: Signals,
   head: () => ({
     meta: [
-      { title: "Signals — Frobex" },
+      { title: "Signals — Solen Trades" },
       { name: "description", content: "Institutional trading signals with your 3-day free trial." },
-      { property: "og:title", content: "Signals — Frobex" },
+      { property: "og:title", content: "Signals — Solen Trades" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

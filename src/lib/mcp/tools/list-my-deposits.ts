@@ -12,7 +12,7 @@ function db(ctx: ToolContext) {
 export default defineTool({
   name: "list_my_deposits",
   title: "List my deposits",
-  description: "List the signed-in Frobex user's deposit requests and their approval status.",
+  description: "List the signed-in Solen Trades user's deposit requests and their approval status.",
   inputSchema: {
     limit: z.number().int().min(1).max(100).optional(),
   },

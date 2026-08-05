@@ -19,7 +19,9 @@ function NotFoundComponent() {
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-gradient">404</h1>
         <h2 className="mt-4 text-xl font-semibold">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">This page doesn't exist on Frobex.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This page doesn't exist on Solen Trades.
+        </p>
         <Link
           to="/"
           className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
@@ -58,25 +60,25 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Frobex — Modern Investment Broker" },
+      { title: "Solen Trades — Modern Investment Broker" },
       {
         name: "description",
         content:
-          "Trade stocks, crypto, and commodities on Frobex. Real-time portfolio tracking and a clean, modern broker experience.",
+          "Trade stocks, crypto, and commodities on Solen Trades. Real-time portfolio tracking and a clean, modern broker experience.",
       },
-      { property: "og:title", content: "Frobex — Modern Investment Broker" },
+      { property: "og:title", content: "Solen Trades — Modern Investment Broker" },
       {
         property: "og:description",
         content:
-          "Trade stocks, crypto, and commodities on Frobex. Real-time portfolio tracking and a clean, modern broker experience.",
+          "Trade stocks, crypto, and commodities on Solen Trades. Real-time portfolio tracking and a clean, modern broker experience.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "Frobex — Modern Investment Broker" },
+      { name: "twitter:title", content: "Solen Trades — Modern Investment Broker" },
       {
         name: "twitter:description",
         content:
-          "Trade stocks, crypto, and commodities on Frobex. Real-time portfolio tracking and a clean, modern broker experience.",
+          "Trade stocks, crypto, and commodities on Solen Trades. Real-time portfolio tracking and a clean, modern broker experience.",
       },
       {
         property: "og:image",

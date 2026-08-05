@@ -51,7 +51,7 @@ const PRESET_AVATARS = [
     id: "bot_1",
     name: "Cyber Quant",
     category: "bots",
-    url: "https://api.dicebear.com/7.x/bottts/svg?seed=FrobexTrader1",
+    url: "https://api.dicebear.com/7.x/bottts/svg?seed=SolenTradesTrader1",
   },
   {
     id: "bot_2",
@@ -346,7 +346,7 @@ function ProfilePage() {
               {currentAvatar ? (
                 <img src={currentAvatar} alt="Profile" className="h-full w-full object-cover" />
               ) : (
-                <div className="flex h-full w-full items-center justify-center bg-gradient-hero text-4xl font-black text-primary-foreground">
+                <div className="flex h-full w-full items-center justify-center bg-blue-600 text-4xl font-black text-white">
                   {(user?.email?.[0] ?? "U").toUpperCase()}
                 </div>
               )}
@@ -354,7 +354,7 @@ function ProfilePage() {
 
             <button
               onClick={() => setCameraOpen(true)}
-              className="absolute bottom-1 right-1 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-transform hover:scale-110 active:scale-95"
+              className="absolute bottom-1 right-1 flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-md transition-transform hover:scale-110 active:scale-95"
               title="Change Photo"
             >
               <Camera className="h-4 w-4" />

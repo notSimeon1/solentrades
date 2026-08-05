@@ -40,17 +40,17 @@ export const Route = createFileRoute("/auth")({
   }),
   head: () => ({
     meta: [
-      { title: "Sign in to Frobex — Institutional-grade crypto brokerage" },
+      { title: "Sign in to Solen Trades — Institutional-grade crypto brokerage" },
       {
         name: "description",
         content:
-          "Join Frobex — a regulated multi-asset brokerage trusted by 180,000+ traders. Trade crypto, stocks and commodities with tight spreads and 24/7 support.",
+          "Join Solen Trades — a regulated multi-asset brokerage trusted by 180,000+ traders. Trade crypto, stocks and commodities with tight spreads and 24/7 support.",
       },
-      { property: "og:title", content: "Frobex — Trade smarter, faster, safer" },
+      { property: "og:title", content: "Solen Trades — Trade smarter, faster, safer" },
       {
         property: "og:description",
         content:
-          "Open a Frobex account in under 60 seconds and access institutional liquidity, AI trading bots and expert market signals.",
+          "Open a Solen Trades account in under 60 seconds and access institutional liquidity, AI trading bots and expert market signals.",
       },
     ],
   }),
@@ -114,7 +114,7 @@ function AuthPage() {
           },
         });
         if (error) throw error;
-        toast.success("Account created. Welcome to Frobex.");
+        toast.success("Account created. Welcome to Solen Trades.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -171,9 +171,9 @@ function AuthPage() {
               </span>
             </h1>
             <p className="mt-4 max-w-xl text-base text-muted-foreground">
-              Frobex gives retail traders the same execution stack the pros use — deep liquidity,
-              AI-driven signals, copy trading and 24/7 desk support. Open an account in under 60
-              seconds.
+              Solen Trades gives retail traders the same execution stack the pros use — deep
+              liquidity, AI-driven signals, copy trading and 24/7 desk support. Open an account in
+              under 60 seconds.
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm">
               <div className="flex items-center gap-2">
@@ -201,7 +201,7 @@ function AuthPage() {
                 <TrendingUp className="h-5 w-5 text-primary-foreground" />
               </div>
               <div>
-                <h2 className="text-xl font-bold">Welcome to Frobex</h2>
+                <h2 className="text-xl font-bold">Welcome to Solen Trades</h2>
                 <p className="text-xs text-muted-foreground">
                   Sign in or create your trading account.
                 </p>
@@ -298,7 +298,7 @@ function AuthPage() {
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@frobex.com"
+                        placeholder="you@solentrades.com"
                         required
                         maxLength={255}
                       />
@@ -329,7 +329,7 @@ function AuthPage() {
               </Tabs>
             </div>
             <p className="mt-4 text-center text-[11px] text-muted-foreground">
-              By continuing you agree to Frobex's{" "}
+              By continuing you agree to Solen Trades's{" "}
               <Link to="/support" className="underline">
                 terms &amp; risk policy
               </Link>
@@ -339,13 +339,13 @@ function AuthPage() {
         </div>
       </section>
 
-      {/* WHY CHOOSE FROBEX */}
+      {/* WHY CHOOSE SOLEN TRADES */}
       <section className="border-b border-border bg-surface/30">
         <div className="mx-auto max-w-7xl px-6 py-16">
           <div className="mb-10 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end">
             <div>
               <Badge variant="outline" className="mb-3 border-primary/40 text-primary">
-                Why Frobex
+                Why Solen Trades
               </Badge>
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
                 Built for traders who don't compromise.
@@ -391,8 +391,8 @@ function AuthPage() {
                 Market insights, curated by our desk.
               </h2>
               <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                What the Frobex trading floor is watching this session — signed in traders see the
-                full stream in real time.
+                What the Solen Trades trading floor is watching this session — signed in traders see
+                the full stream in real time.
               </p>
             </div>
           </div>
@@ -463,7 +463,7 @@ function AuthPage() {
                 </div>
                 <p className="text-sm leading-relaxed">"{t.quote}"</p>
                 <div className="mt-4 flex items-center gap-3 border-t border-border pt-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-hero text-sm font-bold text-primary-foreground">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white border border-blue-400/40">
                     {t.name
                       .split(" ")
                       .map((n) => n[0])
@@ -485,7 +485,7 @@ function AuthPage() {
         <div className="mx-auto max-w-7xl px-6 py-10 text-center">
           <h3 className="text-2xl font-bold">Ready to trade with an edge?</h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            Open your Frobex account today — no minimum deposit to explore the platform.
+            Open your Solen Trades account today — no minimum deposit to explore the platform.
           </p>
           <Button className="mt-5 bg-gradient-hero" onClick={() => setTab("signup")}>
             Create free account
@@ -594,13 +594,13 @@ const TESTIMONIALS = [
     name: "Marcus Chen",
     role: "Prop desk trader · Singapore",
     quote:
-      "Frobex is the first retail broker whose execution I actually trust. Fills are clean, spreads are institutional and the AI bots earn while I sleep.",
+      "Solen Trades is the first retail broker whose execution I actually trust. Fills are clean, spreads are institutional and the AI bots earn while I sleep.",
   },
   {
     name: "Aisha Okafor",
     role: "Full-time swing trader · Lagos",
     quote:
-      "I moved my entire portfolio from three exchanges to Frobex. One dashboard, one wallet, one support desk that actually answers.",
+      "I moved my entire portfolio from three exchanges to Solen Trades. One dashboard, one wallet, one support desk that actually answers.",
   },
   {
     name: "Daniel Rodríguez",
