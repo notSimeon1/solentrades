@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { activateBotServerFn } from "@/lib/bot.functions";
 import { useAuth } from "@/lib/auth-context";
 import { useAccountMode } from "@/lib/account-mode-context";
 import { useCurrency } from "@/lib/currency-context";
@@ -216,6 +217,26 @@ function BotCard({
     }
     setBusy(true);
     try {
+      // 1. Try resilient server function using service role
+      const res = await activateBotServerFn({
+        data: {
+          userId: user!.id,
+          botId: bot.id,
+          amount: usd,
+          mode,
+        },
+      });
+
+      if (res && res.success) {
+        toast.success(`${bot.name} activated! Payouts will accrue automatically.`);
+        qc.invalidateQueries({ queryKey: ["my_active_bots"] });
+        qc.invalidateQueries({ queryKey: ["profile"] });
+        qc.invalidateQueries({ queryKey: ["transactions"] });
+        setOpen(false);
+        return;
+      }
+
+      // 2. Fallback to RPC
       let rpcError: any = null;
       try {
         const { error } = await supabase.rpc(
@@ -230,7 +251,7 @@ function BotCard({
         rpcError = e;
       }
 
-      // Direct fallback if RPC is missing or fails due to parameter types
+      // 3. Fallback to client insert
       if (rpcError) {
         console.warn("[activate_bot RPC failed, performing client fallback]", rpcError);
         const balanceCol = mode === "demo" ? "demo_balance" : "live_balance";
@@ -256,6 +277,7 @@ function BotCard({
           hourly_payout: hourlyPayout,
           daily_payout: dailyPayout,
           payout_interval: bot.payout_interval ?? "hourly",
+          account_mode: mode,
           current_profit: 0,
           status: "active",
         } as never);
@@ -267,6 +289,7 @@ function BotCard({
           amount: usd,
           asset_name: `Activated AI Bot: ${bot.name}`,
           status: "completed",
+          account_mode: mode,
         } as never);
       }
 

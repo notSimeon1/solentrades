@@ -21,14 +21,16 @@ export function useRealtimeProfitEngine() {
         const [botsRes, copyRes] = await Promise.all([
           supabase
             .from("user_active_bots")
-            .select("id, hourly_payout, daily_payout, current_profit")
+            .select(
+              "id, hourly_payout, daily_payout, current_profit, trading_bots(hourly_payout, daily_payout)",
+            )
             .eq("user_id", user.id)
-            .eq("status", "active"),
+            .or("status.eq.active,status.eq.running"),
           supabase
             .from("user_copy_allocations")
             .select("id, allocated_amount, current_profit")
             .eq("user_id", user.id)
-            .eq("status", "active"),
+            .or("status.eq.active,status.eq.running"),
         ]);
 
         const activeBots = botsRes.data || [];
@@ -37,8 +39,12 @@ export function useRealtimeProfitEngine() {
         if (activeBots.length === 0 && copyAllocations.length === 0) return;
 
         let totalBotCredit = 0;
-        const botUpdates = activeBots.map(async (bot) => {
-          const hourly = Number(bot.hourly_payout) || (Number(bot.daily_payout) || 12) / 24;
+        const botUpdates = activeBots.map(async (bot: any) => {
+          const tb = bot.trading_bots;
+          const hourly =
+            Number(bot.hourly_payout) ||
+            Number(tb?.hourly_payout) ||
+            (Number(bot.daily_payout) || Number(tb?.daily_payout) || 12) / 24;
           const tickIncrement = Number((hourly / 360).toFixed(4));
           if (tickIncrement <= 0) return;
 
