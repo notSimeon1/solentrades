@@ -918,6 +918,85 @@ export async function adminReconcileLedger(userId: string, targetUserId?: string
   };
 }
 
+export async function adminClearAllBalances(userId: string) {
+  await assertOwner(userId);
+
+  // 1. Reset all profiles cash & crypto
+  const { error: profErr } = await supabaseAdmin
+    .from("profiles")
+    .update({
+      live_balance: 0,
+      demo_balance: 0,
+      account_balance: 0,
+      available_cash: 0,
+      crypto_balances: {},
+      updated_at: new Date().toISOString(),
+    } as never)
+    .neq("id", "00000000-0000-0000-0000-000000000000");
+
+  if (profErr) {
+    console.error("Clear profiles error:", profErr);
+  }
+
+  // 2. Clear all rows in user_crypto_balances
+  const { error: cryptoErr } = await supabaseAdmin
+    .from("user_crypto_balances")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000");
+
+  if (cryptoErr) {
+    console.error("Clear user_crypto_balances error:", cryptoErr);
+  }
+
+  return {
+    ok: true,
+    message: "Successfully cleared all account balances (cash and crypto) to $0 across all users.",
+  };
+}
+
+export async function adminSetUserRole(userId: string, targetUserId: string, makeAdmin: boolean) {
+  await assertOwner(userId);
+
+  // Update profiles table
+  const { error: profErr } = await supabaseAdmin
+    .from("profiles")
+    .update({
+      role: makeAdmin ? "admin" : "user",
+      is_admin: makeAdmin,
+      is_super_admin: makeAdmin,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", targetUserId);
+
+  if (profErr) {
+    console.error("adminSetUserRole profiles error:", profErr);
+  }
+
+  // Update user_roles table
+  if (makeAdmin) {
+    await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id: targetUserId, role: "admin" }, { onConflict: "user_id,role" });
+  } else {
+    await supabaseAdmin.from("user_roles").delete().eq("user_id", targetUserId).eq("role", "admin");
+  }
+
+  // Update auth user app metadata
+  try {
+    await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
+      app_metadata: { role: makeAdmin ? "admin" : "user" },
+      user_metadata: { is_admin: makeAdmin, role: makeAdmin ? "admin" : "user" },
+    });
+  } catch (e) {
+    console.warn("adminSetUserRole auth update warning:", e);
+  }
+
+  return {
+    ok: true,
+    message: makeAdmin ? "Granted full admin access" : "Revoked admin access",
+  };
+}
+
 // Make deposit/withdrawal functions use dynamic rates from platform_settings
 // These are exported so the server fns above can call them too.
 export { getPlatformNumeric };

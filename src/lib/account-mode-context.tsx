@@ -193,7 +193,10 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
           const p =
             symbolUpper === "USDT"
               ? 1.0
-              : (prices[symbolUpper] ?? FALLBACK_PRICES[symbolUpper] ?? 1.0);
+              : (prices[`${symbolUpper}USDT`]?.price ??
+                prices[symbolUpper]?.price ??
+                FALLBACK_PRICES[symbolUpper] ??
+                1.0);
           totalCryptoUsd += qty * p;
         }
       });

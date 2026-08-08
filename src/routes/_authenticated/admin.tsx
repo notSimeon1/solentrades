@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { WhatsAppChat } from "@/components/WhatsAppChat";
 import {
   adjustAdminBalance,
+  clearAllBalances,
   decideAdminDeposit,
   decideAdminKyc,
   decideAdminWithdrawal,
@@ -15,6 +16,7 @@ import {
   savePlatformSetting,
   postAdminNews,
   reconcileAdminLedger,
+  setUserAdminRole,
   toggleAdminAiTrading,
   toggleAdminAccountMode,
   toggleAdminSuspend,
@@ -2908,6 +2910,10 @@ function AdminRolesTab({
   refetch: () => void | Promise<unknown>;
 }) {
   const [q, setQ] = useState("");
+  const setRoleFn = useServerFn(setUserAdminRole);
+  const clearBalancesFn = useServerFn(clearAllBalances);
+  const [clearing, setClearing] = useState(false);
+
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids_full"],
     queryFn: async () => {
@@ -2935,7 +2941,35 @@ function AdminRolesTab({
     );
   }, [users, q]);
 
-  const admins = (users ?? []).filter((u: any) => adminSet.has(u.id));
+  const admins = (users ?? []).filter(
+    (u: any) =>
+      u.email?.toLowerCase() === OWNER_EMAIL ||
+      u.is_admin ||
+      u.is_super_admin ||
+      u.role === "admin" ||
+      u.role === "super_admin" ||
+      adminSet.has(u.id),
+  );
+
+  const handleClearAllBalances = async () => {
+    if (
+      !confirm(
+        "Are you sure you want to CLEAR ALL account balances (both cash and crypto) to $0 for ALL users across the database?",
+      )
+    ) {
+      return;
+    }
+    try {
+      setClearing(true);
+      const res = await clearBalancesFn();
+      toast.success(res.message || "All account balances cleared to $0!");
+      await reload();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to clear balances");
+    } finally {
+      setClearing(false);
+    }
+  };
 
   if (loading)
     return (
@@ -2947,18 +2981,36 @@ function AdminRolesTab({
   return (
     <div className="space-y-4">
       <Card className="p-5">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <KeyRound className="h-5 w-5" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <KeyRound className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                Role & system management
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Promote users to admin so they get full access to administrative features. Primary
+                Super Admin (<span className="font-mono">{OWNER_EMAIL}</span>) is protected at the
+                database level.
+              </p>
+            </div>
           </div>
-          <div className="flex-1">
-            <h2 className="text-lg font-semibold flex items-center gap-2">Role management</h2>
-            <p className="text-sm text-muted-foreground">
-              Promote users to admin so they get the same panel access you have. The Primary Super
-              Admin (<span className="font-mono">{OWNER_EMAIL}</span>) cannot be demoted or modified
-              by anyone else — enforced at the database level.
-            </p>
-          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={clearing}
+            onClick={handleClearAllBalances}
+            className="shrink-0 font-bold"
+          >
+            {clearing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Clear all balances to $0
+          </Button>
         </div>
       </Card>
 
@@ -3000,7 +3052,14 @@ function AdminRolesTab({
         <div className="divide-y divide-border">
           {filtered.map((u: any) => {
             const isOwner = u.email?.toLowerCase() === OWNER_EMAIL;
-            const isAdminUser = adminSet.has(u.id);
+            const isAdminUser = Boolean(
+              isOwner ||
+              u.is_admin ||
+              u.is_super_admin ||
+              u.role === "admin" ||
+              u.role === "super_admin" ||
+              adminSet.has(u.id),
+            );
             return (
               <div
                 key={u.id}
@@ -3032,42 +3091,14 @@ function AdminRolesTab({
                       disabled={isOwner}
                       onCheckedChange={async (checked) => {
                         try {
-                          const fn = checked ? "admin_grant_admin" : "admin_revoke_admin";
-                          try {
-                            await supabase.rpc(fn as never, { _target: u.id } as never);
-                          } catch (rpcErr) {
-                            console.warn(
-                              "RPC grant/revoke failed, performing direct table updates:",
-                              rpcErr,
-                            );
-                          }
-
-                          // Update profiles table
-                          await supabase
-                            .from("profiles")
-                            .update({
-                              role: checked ? "admin" : "user",
-                              is_admin: checked,
-                            })
-                            .eq("id", u.id);
-
-                          // Update user_roles table
-                          if (checked) {
-                            await supabase
-                              .from("user_roles")
-                              .upsert(
-                                { user_id: u.id, role: "admin" },
-                                { onConflict: "user_id,role" },
-                              );
-                          } else {
-                            await supabase
-                              .from("user_roles")
-                              .delete()
-                              .eq("user_id", u.id)
-                              .eq("role", "admin");
-                          }
-
-                          toast.success(checked ? "Admin access granted" : "Admin access revoked");
+                          const res = await setRoleFn({
+                            targetUserId: u.id,
+                            makeAdmin: checked,
+                          });
+                          toast.success(
+                            res.message ||
+                              (checked ? "Admin access granted" : "Admin access revoked"),
+                          );
                           await reload();
                         } catch (err: any) {
                           toast.error(err.message ?? "Could not update role");
