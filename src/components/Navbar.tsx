@@ -64,7 +64,7 @@ type NavItem = {
   badge?: { label: string; tone: "gold" | "green" | "purple" | "blue" };
 };
 
-const OWNER_EMAIL = "simonosawaru255@gmail.com";
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
 
 export function Navbar() {
   const { user, signOut } = useAuth();
@@ -102,7 +102,8 @@ export function Navbar() {
       setIsAdmin(false);
       return;
     }
-    if (user.email?.toLowerCase() === OWNER_EMAIL) {
+    const userEmail = user.email?.toLowerCase();
+    if (userEmail && ADMIN_EMAILS.includes(userEmail)) {
       setIsAdmin(true);
       return;
     }
@@ -125,7 +126,7 @@ export function Navbar() {
           prof?.role === "admin" ||
           prof?.role === "super_admin",
         );
-        setIsAdmin(hasRole || hasProf || user.email?.toLowerCase() === OWNER_EMAIL);
+        setIsAdmin(hasRole || hasProf || (userEmail ? ADMIN_EMAILS.includes(userEmail) : false));
       } catch (e) {
         console.warn("Navbar admin check failed:", e);
       }

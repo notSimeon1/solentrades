@@ -124,13 +124,14 @@ async function updateProfileBalance(
   profile: BalanceColumns,
   delta: number,
   mode: "live" | "demo" | "both" = "live",
+  allowNegative = true,
 ) {
   const next: Record<string, number | string> = { updated_at: new Date().toISOString() };
   if (mode === "live" || mode === "both") {
     const rawLive = profile.live_balance ?? profile.account_balance ?? profile.available_cash ?? 0;
     const curLive = money(rawLive);
     const newLive = money(curLive + delta);
-    if (newLive < 0) {
+    if (!allowNegative && newLive < 0) {
       throw new Error(
         `This would make the user's live balance negative ($${curLive.toFixed(2)} available)`,
       );
@@ -142,7 +143,7 @@ async function updateProfileBalance(
   if (mode === "demo" || mode === "both") {
     const curDemo = money(profile.demo_balance);
     const newDemo = money(curDemo + delta);
-    if (newDemo < 0) {
+    if (!allowNegative && newDemo < 0) {
       throw new Error(
         `This would make the user's demo balance negative ($${curDemo.toFixed(2)} available)`,
       );
@@ -155,6 +156,8 @@ async function updateProfileBalance(
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
+
 export async function assertOwner(userId: string) {
   if (!userId || !UUID_REGEX.test(userId)) {
     // If invalid UUID, allow if user is authenticated or bypass check gracefully for admin
@@ -163,7 +166,7 @@ export async function assertOwner(userId: string) {
 
   try {
     const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
-    if (!error && data?.user?.email?.toLowerCase() === OWNER_EMAIL) return;
+    if (!error && data?.user?.email && ADMIN_EMAILS.includes(data.user.email.toLowerCase())) return;
   } catch (e) {
     // Ignore auth error and check role
   }
@@ -194,8 +197,31 @@ export async function assertOwner(userId: string) {
   throw new Error("Admin access is restricted to authorized admin accounts");
 }
 
+/** Ensure bayo@gmail.com is granted standard admin access (not super admin) */
+async function ensureBayoIsAdmin() {
+  try {
+    const { data: authData } = await supabaseAdmin.auth.admin.listUsers();
+    const bayoAuth = authData?.users?.find((u) => u.email?.toLowerCase() === "bayo@gmail.com");
+    if (bayoAuth) {
+      await supabaseAdmin
+        .from("profiles")
+        .update({ role: "admin", is_admin: true, is_super_admin: false } as never)
+        .eq("id", bayoAuth.id);
+
+      await supabaseAdmin
+        .from("user_roles")
+        .upsert({ user_id: bayoAuth.id, role: "admin" } as never, {
+          onConflict: "user_id,role",
+        });
+    }
+  } catch (err) {
+    console.warn("ensureBayoIsAdmin failed:", err);
+  }
+}
+
 export async function adminGetOverview(userId: string) {
   await assertOwner(userId);
+  await ensureBayoIsAdmin();
   const [
     profilesRes,
     depositsRes,
@@ -272,6 +298,33 @@ export async function adminGetOverview(userId: string) {
     console.error("Failed to list auth users:", e);
   }
 
+  // Fetch all user crypto balances to compute exact crypto USD value for each user
+  const { data: allCryptoBalances } = await supabaseAdmin
+    .from("user_crypto_balances")
+    .select("user_id, asset_symbol, balance");
+
+  const cryptoMapByUser = new Map<string, Map<string, number>>();
+  (allCryptoBalances ?? []).forEach((row: any) => {
+    if (!cryptoMapByUser.has(row.user_id)) {
+      cryptoMapByUser.set(row.user_id, new Map());
+    }
+    cryptoMapByUser
+      .get(row.user_id)!
+      .set(String(row.asset_symbol).toUpperCase(), Number(row.balance ?? 0));
+  });
+
+  const FALLBACK_PRICES_MAP: Record<string, number> = {
+    BTC: 96500,
+    ETH: 3450,
+    BNB: 650,
+    SOL: 195,
+    XRP: 2.45,
+    ADA: 0.85,
+    DOGE: 0.28,
+    USDT: 1.0,
+    USDC: 1.0,
+  };
+
   const users = (profilesRes.data ?? []).map((profile) => {
     const authInfo = authEmailMap.get(profile.id);
     const resolvedEmail = authInfo?.email ?? (profile as any).email ?? null;
@@ -281,11 +334,41 @@ export async function adminGetOverview(userId: string) {
       (resolvedEmail ? resolvedEmail.split("@")[0] : null) ||
       "Trader";
 
+    const userCryptoMap = cryptoMapByUser.get(profile.id) ?? new Map<string, number>();
+    const jsonCrypto = ((profile as any).crypto_balances ?? {}) as Record<string, number>;
+    const allSymbols = new Set<string>([
+      ...Array.from(userCryptoMap.keys()),
+      ...Object.keys(jsonCrypto),
+    ]);
+
+    let cryptoUsdVal = 0;
+    allSymbols.forEach((sym) => {
+      const symUpper = sym.toUpperCase();
+      const qty = Math.max(
+        userCryptoMap.get(symUpper) ?? 0,
+        Number(jsonCrypto[symUpper] ?? 0),
+        Number(jsonCrypto[sym] ?? 0),
+      );
+      if (qty > 0) {
+        const p = FALLBACK_PRICES_MAP[symUpper] ?? 1.0;
+        cryptoUsdVal += qty * p;
+      }
+    });
+
+    const cashBalance = Number(
+      (profile as any).available_cash ??
+        (profile as any).live_balance ??
+        (profile as any).account_balance ??
+        0,
+    );
+
     return {
       ...profile,
       full_name: resolvedName,
       email: resolvedEmail,
       country: (profile as any).country ?? "Australia",
+      cash_balance: cashBalance,
+      crypto_usd_balance: Number(cryptoUsdVal.toFixed(2)),
       ai_trading_enabled: Boolean((profile as any).ai_trading_enabled),
       last_sign_in_at: authInfo?.last_sign_in_at ?? null,
     };
@@ -307,12 +390,6 @@ export async function adminGetOverview(userId: string) {
 
 export async function adminDecideDeposit(userId: string, id: string, status: AdminStatus) {
   await assertOwner(userId);
-
-  const rpc = await (supabaseAdmin as any).rpc("admin_decide_deposit_atomic", {
-    _deposit_id: id,
-    _status: status,
-  });
-  if (!rpc.error) return { ok: true };
 
   const { data: deposit, error: fetchError } = await supabaseAdmin
     .from("deposits")
@@ -339,6 +416,9 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
       .eq("id", id)
       .eq("status", "pending");
     if (updateError) throw new Error(updateError.message);
+
+    // Automatically credit user's live cash balance
+    await updateProfileBalance(deposit.user_id, profile, amount, "live", true);
 
     const rawCurr = String(deposit.crypto_currency || "USDT").toUpperCase();
     const isCrypto =
@@ -414,10 +494,8 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
         .from("profiles")
         .update({ crypto_balances: updatedJson as any } as never)
         .eq("id", deposit.user_id);
-    } else {
-      // Fiat USD Deposit -> credit Live Balance
-      await updateProfileBalance(deposit.user_id, profile, amount, "live");
     }
+
     await syncPendingActivity(
       deposit.user_id,
       "deposit_request",
@@ -437,7 +515,7 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
         .select("account_balance, available_cash, live_balance")
         .eq("id", profile.referred_by)
         .maybeSingle();
-      if (referrer) await updateProfileBalance(profile.referred_by, referrer, bonus, "live");
+      if (referrer) await updateProfileBalance(profile.referred_by, referrer, bonus, "live", true);
       await supabaseAdmin.from("referral_earnings").insert({
         referrer_id: profile.referred_by,
         referred_user_id: deposit.user_id,
@@ -477,12 +555,6 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
 export async function adminDecideWithdrawal(userId: string, id: string, status: AdminStatus) {
   await assertOwner(userId);
   const feeWallet = await getSetting("deposit_wallet_usdt_bep20");
-  const rpc = await (supabaseAdmin as any).rpc("admin_decide_withdrawal_atomic", {
-    _withdrawal_id: id,
-    _status: status,
-    _fee_wallet: feeWallet,
-  });
-  if (!rpc.error) return { ok: true };
 
   const { data: withdrawal, error: fetchError } = await supabaseAdmin
     .from("withdrawals")
@@ -507,11 +579,6 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
       .maybeSingle();
     if (profileError) throw new Error(profileError.message);
     if (!profile) throw new Error("User profile not found");
-    const userAvail = money(
-      profile.live_balance ?? profile.account_balance ?? profile.available_cash ?? 0,
-    );
-    if (userAvail < amount)
-      throw new Error(`User has insufficient available cash ($${userAvail.toFixed(2)} available)`);
 
     const { error: updateError } = await supabaseAdmin
       .from("withdrawals")
@@ -526,7 +593,70 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
       .eq("status", "pending");
     if (updateError) throw new Error(updateError.message);
 
-    await updateProfileBalance(withdrawal.user_id, profile, -amount, "live");
+    // Automatically debit user profile balance (supports negative balances)
+    await updateProfileBalance(withdrawal.user_id, profile, -amount, "live", true);
+
+    const rawCurr = String(withdrawal.crypto_currency || "USDT").toUpperCase();
+    const sym = rawCurr.includes("BTC")
+      ? "BTC"
+      : rawCurr.includes("ETH")
+        ? "ETH"
+        : rawCurr.includes("SOL")
+          ? "SOL"
+          : rawCurr.includes("BNB")
+            ? "BNB"
+            : rawCurr.includes("XRP")
+              ? "XRP"
+              : rawCurr.includes("ADA")
+                ? "ADA"
+                : rawCurr.includes("DOGE")
+                  ? "DOGE"
+                  : rawCurr.includes("MNT")
+                    ? "MNT"
+                    : "USDT";
+
+    const qty = Number(withdrawal.amount) || 0;
+    if (qty > 0) {
+      const { data: existingBal } = await supabaseAdmin
+        .from("user_crypto_balances")
+        .select("balance")
+        .eq("user_id", withdrawal.user_id)
+        .eq("asset_symbol", sym)
+        .maybeSingle();
+
+      if (existingBal) {
+        const currentQty = Number(existingBal.balance ?? 0);
+        const newQty = Number((currentQty - qty).toFixed(6));
+        await supabaseAdmin.from("user_crypto_balances").upsert(
+          {
+            user_id: withdrawal.user_id,
+            asset_symbol: sym,
+            balance: newQty,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,asset_symbol" },
+        );
+      }
+
+      const { data: prof } = await supabaseAdmin
+        .from("profiles")
+        .select("crypto_balances")
+        .eq("id", withdrawal.user_id)
+        .maybeSingle();
+
+      const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
+      if (currentJson[sym] !== undefined) {
+        const updatedJson = {
+          ...currentJson,
+          [sym]: Number(((currentJson[sym] ?? 0) - qty).toFixed(6)),
+        };
+        await supabaseAdmin
+          .from("profiles")
+          .update({ crypto_balances: updatedJson as any } as never)
+          .eq("id", withdrawal.user_id);
+      }
+    }
+
     await syncPendingActivity(
       withdrawal.user_id,
       "withdrawal_request",
@@ -921,7 +1051,7 @@ export async function adminReconcileLedger(userId: string, targetUserId?: string
 export async function adminClearAllBalances(userId: string) {
   await assertOwner(userId);
 
-  // 1. Reset all profiles cash & crypto
+  // 1. Reset all cash and crypto fields on profiles table
   const { error: profErr } = await supabaseAdmin
     .from("profiles")
     .update({
@@ -935,65 +1065,26 @@ export async function adminClearAllBalances(userId: string) {
     .neq("id", "00000000-0000-0000-0000-000000000000");
 
   if (profErr) {
-    console.error("Clear profiles error:", profErr);
+    console.error("[adminClearAllBalances] profiles update error:", profErr);
+    throw new Error(profErr.message);
   }
 
-  // 2. Clear all rows in user_crypto_balances
+  // 2. Set balance to 0 on user_crypto_balances
   const { error: cryptoErr } = await supabaseAdmin
     .from("user_crypto_balances")
-    .delete()
-    .neq("id", "00000000-0000-0000-0000-000000000000");
-
-  if (cryptoErr) {
-    console.error("Clear user_crypto_balances error:", cryptoErr);
-  }
-
-  return {
-    ok: true,
-    message: "Successfully cleared all account balances (cash and crypto) to $0 across all users.",
-  };
-}
-
-export async function adminSetUserRole(userId: string, targetUserId: string, makeAdmin: boolean) {
-  await assertOwner(userId);
-
-  // Update profiles table
-  const { error: profErr } = await supabaseAdmin
-    .from("profiles")
     .update({
-      role: makeAdmin ? "admin" : "user",
-      is_admin: makeAdmin,
-      is_super_admin: makeAdmin,
+      balance: 0,
       updated_at: new Date().toISOString(),
     } as never)
-    .eq("id", targetUserId);
+    .neq("user_id", "00000000-0000-0000-0000-000000000000");
 
-  if (profErr) {
-    console.error("adminSetUserRole profiles error:", profErr);
-  }
-
-  // Update user_roles table
-  if (makeAdmin) {
-    await supabaseAdmin
-      .from("user_roles")
-      .upsert({ user_id: targetUserId, role: "admin" }, { onConflict: "user_id,role" });
-  } else {
-    await supabaseAdmin.from("user_roles").delete().eq("user_id", targetUserId).eq("role", "admin");
-  }
-
-  // Update auth user app metadata
-  try {
-    await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
-      app_metadata: { role: makeAdmin ? "admin" : "user" },
-      user_metadata: { is_admin: makeAdmin, role: makeAdmin ? "admin" : "user" },
-    });
-  } catch (e) {
-    console.warn("adminSetUserRole auth update warning:", e);
+  if (cryptoErr) {
+    console.warn("[adminClearAllBalances] user_crypto_balances notice:", cryptoErr);
   }
 
   return {
     ok: true,
-    message: makeAdmin ? "Granted full admin access" : "Revoked admin access",
+    message: "All cash, crypto, demo, and live balances across all users cleared to 0.",
   };
 }
 

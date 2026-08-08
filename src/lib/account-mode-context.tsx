@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { useBinancePrices } from "@/hooks/useBinancePrices";
 import { toast } from "sonner";
 
 type AccountMode = "demo" | "live";
@@ -65,7 +66,35 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [prices, setPrices] = useState<Record<string, number>>(FALLBACK_PRICES);
 
-  // 1. Fetch live prices for valuation
+  const BINANCE_SYMBOLS = useMemo(
+    () => [
+      "BTCUSDT",
+      "ETHUSDT",
+      "BNBUSDT",
+      "SOLUSDT",
+      "XRPUSDT",
+      "ADAUSDT",
+      "MNTUSDT",
+      "DOGEUSDT",
+    ],
+    [],
+  );
+  const { tickers } = useBinancePrices(BINANCE_SYMBOLS);
+
+  const activePrices = useMemo(() => {
+    const map: Record<string, number> = { ...FALLBACK_PRICES, ...prices };
+    Object.entries(tickers ?? {}).forEach(([s, t]) => {
+      const base = s.replace(/USDT$/, "");
+      if (t?.price && t.price > 0) {
+        map[base] = t.price;
+      }
+    });
+    map["USDT"] = 1.0;
+    map["USDC"] = 1.0;
+    return map;
+  }, [tickers, prices]);
+
+  // 1. Fetch live prices for valuation fallback
   useEffect(() => {
     let cancelled = false;
     async function fetchPrices() {
@@ -158,7 +187,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
 
       const m = (prof?.account_mode as AccountMode) ?? "demo";
       const fiatLive = Number(
-        prof?.live_balance ?? prof?.account_balance ?? prof?.available_cash ?? 0,
+        prof?.available_cash ?? prof?.live_balance ?? prof?.account_balance ?? 0,
       );
       const demo = Number(prof?.demo_balance ?? 10000);
 
@@ -191,12 +220,9 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
         );
         if (qty > 0) {
           const p =
-            symbolUpper === "USDT"
+            symbolUpper === "USDT" || symbolUpper === "USDC"
               ? 1.0
-              : (prices[`${symbolUpper}USDT`]?.price ??
-                prices[symbolUpper]?.price ??
-                FALLBACK_PRICES[symbolUpper] ??
-                1.0);
+              : (activePrices[symbolUpper] ?? FALLBACK_PRICES[symbolUpper] ?? 1.0);
           totalCryptoUsd += qty * p;
         }
       });
@@ -205,7 +231,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
 
       setMode(m);
       setFiatLiveBalance(fiatLive);
-      setCryptoBalance(totalCryptoUsd);
+      setCryptoBalance(Number(totalCryptoUsd.toFixed(2)));
       setLiveBalance(totalLive);
       setDemoBalance(demo);
     } catch (err) {
@@ -213,7 +239,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user, prices]);
+  }, [user, activePrices]);
 
   useEffect(() => {
     fetchAllBalances();

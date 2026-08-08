@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
   adminAdjustBalance,
-  adminClearAllBalances,
   adminDecideDeposit,
   adminDecideKyc,
   adminDecideWithdrawal,
@@ -12,7 +11,7 @@ import {
   adminSavePlatformSetting,
   adminPostNews,
   adminReconcileLedger,
-  adminSetUserRole,
+  adminClearAllBalances,
   adminToggleAiTrading,
   adminToggleAccountMode,
   adminToggleSuspend,
@@ -189,19 +188,6 @@ export const reconcileAdminLedger = createServerFn({ method: "POST" })
     adminReconcileLedger(context?.userId || "admin", data?.userId),
   );
 
-export const clearAllBalances = createServerFn({ method: "POST" }).handler(async ({ context }) =>
-  adminClearAllBalances(context?.userId || "admin"),
+export const clearAllAdminBalances = createServerFn({ method: "POST" }).handler(
+  async ({ context }) => adminClearAllBalances(context?.userId || "admin"),
 );
-
-export const setUserAdminRole = createServerFn({ method: "POST" })
-  .inputValidator((input: { targetUserId: string; makeAdmin: boolean }) =>
-    z
-      .object({
-        targetUserId: z.string().uuid(),
-        makeAdmin: z.boolean(),
-      })
-      .parse(input),
-  )
-  .handler(async ({ data, context }) =>
-    adminSetUserRole(context?.userId || "admin", data.targetUserId, data.makeAdmin),
-  );

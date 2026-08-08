@@ -194,3 +194,64 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
 
   return { tickers, status };
 }
+
+const BINANCE_KLINE_MAP: Record<string, string> = {
+  "BTC/USD": "BTCUSDT",
+  "ETH/USD": "ETHUSDT",
+  "SOL/USD": "SOLUSDT",
+  "BNB/USD": "BNBUSDT",
+  "XRP/USD": "XRPUSDT",
+  "ADA/USD": "ADAUSDT",
+  "DOGE/USD": "DOGEUSDT",
+  "MNT/USD": "MNTUSDT",
+  BTCUSDT: "BTCUSDT",
+  ETHUSDT: "ETHUSDT",
+  SOLUSDT: "SOLUSDT",
+  BNBUSDT: "BNBUSDT",
+  XRPUSDT: "XRPUSDT",
+  ADAUSDT: "ADAUSDT",
+  DOGEUSDT: "DOGEUSDT",
+  MNTUSDT: "MNTUSDT",
+};
+
+export async function fetchBinanceLiveCandles(
+  sym: string,
+  count = 120,
+): Promise<import("../components/TradingChart").Candle[] | null> {
+  const bSym =
+    BINANCE_KLINE_MAP[sym] || (sym.includes("/") ? `${sym.replace("/", "")}USDT` : `${sym}USDT`);
+  try {
+    const res = await fetch(
+      `https://api.binance.com/api/v3/klines?symbol=${bSym}&interval=1m&limit=${count}`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    if (!res.ok) throw new Error("binance_fail");
+    const data = await res.json();
+    return (data as any[][]).map((k) => ({
+      time: Math.floor(k[0] / 1000) as import("lightweight-charts").Time,
+      open: Number(k[1]),
+      high: Number(k[2]),
+      low: Number(k[3]),
+      close: Number(k[4]),
+    }));
+  } catch {
+    try {
+      const res = await fetch(
+        `https://api.bybit.com/v5/market/kline?category=spot&symbol=${bSym}&interval=1&limit=${count}`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (!res.ok) throw new Error("bybit_fail");
+      const j = await res.json();
+      const list: any[][] = j?.result?.list ?? [];
+      return list.reverse().map((k) => ({
+        time: Math.floor(Number(k[0]) / 1000) as import("lightweight-charts").Time,
+        open: Number(k[1]),
+        high: Number(k[2]),
+        low: Number(k[3]),
+        close: Number(k[4]),
+      }));
+    } catch {
+      return null;
+    }
+  }
+}

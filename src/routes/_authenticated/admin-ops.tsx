@@ -33,11 +33,14 @@ import {
   TrendingUp,
   Bot,
   ChartBar as BarChart3,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { clearAllAdminBalances } from "@/lib/admin.functions";
 
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
 
 export const Route = createFileRoute("/_authenticated/admin-ops")({
   component: AdminOpsPage,
@@ -51,7 +54,8 @@ function AdminOpsPage() {
 
   useEffect(() => {
     if (!user) return;
-    if (user.email?.toLowerCase() === OWNER_EMAIL) {
+    const userEmail = user.email?.toLowerCase();
+    if (userEmail && ADMIN_EMAILS.includes(userEmail)) {
       setIsAdmin(true);
       return;
     }
@@ -852,6 +856,72 @@ function PaymentsTab() {
   );
 }
 
+function ClearBalancesCard() {
+  const qc = useQueryClient();
+  const [clearing, setClearing] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const handleClear = async () => {
+    setClearing(true);
+    try {
+      const res = await clearAllAdminBalances();
+      toast.success(res.message ?? "All user balances cleared!");
+      setConfirmOpen(false);
+      qc.invalidateQueries();
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to clear balances");
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <Card className="p-6 space-y-4 border-destructive/40 bg-destructive/5">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+          <Trash2 className="h-5 w-5" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold text-destructive">Global Balance Wipeout</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Clear all balances for EVERY user on the site. This wipes cash balances, live balances,
+            demo balances, fiat balances, and crypto wallet balances to $0.00 across the entire
+            platform.
+          </p>
+        </div>
+      </div>
+
+      {!confirmOpen ? (
+        <Button variant="destructive" size="sm" onClick={() => setConfirmOpen(true)}>
+          <Trash2 className="mr-1.5 h-4 w-4" />
+          Clear All Balances (Cash, Crypto & Live)
+        </Button>
+      ) : (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 space-y-3">
+          <p className="text-xs font-semibold text-destructive">
+            ⚠️ Are you absolutely sure? This will reset every user's cash, live, demo, and crypto
+            balance to $0.00 immediately.
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="destructive" size="sm" disabled={clearing} onClick={handleClear}>
+              {clearing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              Yes, Clear All Balances Now
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={clearing}
+              onClick={() => setConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function SettingsTab() {
   const { data: profile } = useQuery({
     queryKey: ["admin_profile_settings"],
@@ -866,33 +936,37 @@ function SettingsTab() {
   });
 
   return (
-    <Card className="space-y-4 p-6">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
-        <Settings className="h-4 w-4 text-primary" /> Platform Settings
-      </h2>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <div className="text-xs text-muted-foreground">AI Trading</div>
-          <div className="mt-1 font-semibold">
-            {profile?.ai_trading_enabled ? "Enabled" : "Disabled"}
+    <div className="space-y-4">
+      <Card className="space-y-4 p-6">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Settings className="h-4 w-4 text-primary" /> Platform Settings
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <div className="text-xs text-muted-foreground">AI Trading</div>
+            <div className="mt-1 font-semibold">
+              {profile?.ai_trading_enabled ? "Enabled" : "Disabled"}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <div className="text-xs text-muted-foreground">Signals Access</div>
+            <div className="mt-1 font-semibold">
+              {profile?.signals_lifetime ? "Lifetime" : "Trial"}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <div className="text-xs text-muted-foreground">Preferred Currency</div>
+            <div className="mt-1 font-semibold">{profile?.preferred_currency ?? "USD"}</div>
+          </div>
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <div className="text-xs text-muted-foreground">Owner Email</div>
+            <div className="mt-1 font-semibold">{OWNER_EMAIL}</div>
           </div>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <div className="text-xs text-muted-foreground">Signals Access</div>
-          <div className="mt-1 font-semibold">
-            {profile?.signals_lifetime ? "Lifetime" : "Trial"}
-          </div>
-        </div>
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <div className="text-xs text-muted-foreground">Preferred Currency</div>
-          <div className="mt-1 font-semibold">{profile?.preferred_currency ?? "USD"}</div>
-        </div>
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <div className="text-xs text-muted-foreground">Owner Email</div>
-          <div className="mt-1 font-semibold">{OWNER_EMAIL}</div>
-        </div>
-      </div>
-    </Card>
+      </Card>
+
+      <ClearBalancesCard />
+    </div>
   );
 }
 

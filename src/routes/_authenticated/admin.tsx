@@ -6,7 +6,6 @@ import { useAuth } from "@/lib/auth-context";
 import { WhatsAppChat } from "@/components/WhatsAppChat";
 import {
   adjustAdminBalance,
-  clearAllBalances,
   decideAdminDeposit,
   decideAdminKyc,
   decideAdminWithdrawal,
@@ -16,7 +15,6 @@ import {
   savePlatformSetting,
   postAdminNews,
   reconcileAdminLedger,
-  setUserAdminRole,
   toggleAdminAiTrading,
   toggleAdminAccountMode,
   toggleAdminSuspend,
@@ -75,8 +73,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { useBinancePrices, fetchBinanceLiveCandles, type Ticker } from "@/hooks/useBinancePrices";
+import { TradingChart, type Candle } from "@/components/TradingChart";
+import { generateCandles, nextCandle, type ChartMode } from "@/lib/chart-engine";
 
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
@@ -88,9 +90,27 @@ function AdminPage() {
   const fetchOverview = useServerFn(getAdminOverview);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
+  const BINANCE_PRICE_SYMBOLS = useMemo(
+    () => [
+      "BTCUSDT",
+      "ETHUSDT",
+      "BNBUSDT",
+      "SOLUSDT",
+      "XRPUSDT",
+      "ADAUSDT",
+      "MNTUSDT",
+      "DOGEUSDT",
+      "USDTUSDT",
+      "USDCUSDT",
+    ],
+    [],
+  );
+  const { tickers, status: wsStatus } = useBinancePrices(BINANCE_PRICE_SYMBOLS);
+
   useEffect(() => {
     if (!user) return;
-    if (user.email?.toLowerCase() === OWNER_EMAIL) {
+    const userEmail = user.email?.toLowerCase();
+    if (userEmail && ADMIN_EMAILS.includes(userEmail)) {
       setIsAdmin(true);
       return;
     }
@@ -163,6 +183,26 @@ function AdminPage() {
             <p className="text-sm text-muted-foreground">
               Approvals, balances, charts and wallet settings.
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  wsStatus === "live" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                }`}
+              />
+              <span className="font-semibold text-foreground">Binance WebSocket:</span>
+              <span
+                className={wsStatus === "live" ? "text-emerald-400 font-medium" : "text-amber-400"}
+              >
+                {wsStatus === "live" ? "Live Feed Active" : "Connecting..."}
+              </span>
+              {wsStatus === "live" && tickers["BTCUSDT"]?.price && (
+                <span className="ml-2 font-mono text-[11px] text-muted-foreground hidden sm:inline">
+                  BTC: ${tickers["BTCUSDT"].price.toLocaleString()} · ETH: $
+                  {(tickers["ETHUSDT"]?.price ?? 0).toLocaleString()} · SOL: $
+                  {(tickers["SOLUSDT"]?.price ?? 0).toLocaleString()}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -238,6 +278,7 @@ function AdminPage() {
             users={overviewQuery.data?.users}
             loading={overviewQuery.isLoading}
             refetch={overviewQuery.refetch}
+            tickers={tickers}
           />
         </TabsContent>
         <TabsContent value="proofs">
@@ -246,6 +287,7 @@ function AdminPage() {
             users={overviewQuery.data?.users}
             loading={overviewQuery.isLoading}
             refetch={overviewQuery.refetch}
+            tickers={tickers}
           />
         </TabsContent>
         <TabsContent value="withdrawals">
@@ -254,6 +296,7 @@ function AdminPage() {
             users={overviewQuery.data?.users}
             loading={overviewQuery.isLoading}
             refetch={overviewQuery.refetch}
+            tickers={tickers}
           />
         </TabsContent>
         <TabsContent value="users">
@@ -261,6 +304,7 @@ function AdminPage() {
             users={overviewQuery.data?.users}
             loading={overviewQuery.isLoading}
             refetch={overviewQuery.refetch}
+            tickers={tickers}
           />
         </TabsContent>
         <TabsContent value="kyc">
@@ -299,13 +343,13 @@ function AdminPage() {
           <AdminCopyTab />
         </TabsContent>
         <TabsContent value="premarket">
-          <AdminPreMarketTab />
+          <AdminPreMarketTab tickers={tickers} />
         </TabsContent>
         <TabsContent value="announcements">
           <AdminAnnouncementsTab />
         </TabsContent>
         <TabsContent value="signals">
-          <AdminSignalsTab />
+          <AdminSignalsTab tickers={tickers} />
         </TabsContent>
         <TabsContent value="support">
           <AdminSupportTab users={overviewQuery.data?.users} />
@@ -330,11 +374,13 @@ function DepositsTab({
   users,
   loading,
   refetch,
+  tickers,
 }: {
   items?: any[];
   users?: any[];
   loading: boolean;
   refetch: () => void | Promise<unknown>;
+  tickers?: Record<string, Ticker>;
 }) {
   const decideDeposit = useServerFn(decideAdminDeposit);
   const decide = async (d: any, status: "approved" | "rejected") => {
@@ -348,7 +394,14 @@ function DepositsTab({
   };
 
   return (
-    <RequestList items={items} users={users} loading={loading} kind="Deposit" onDecide={decide} />
+    <RequestList
+      items={items}
+      users={users}
+      loading={loading}
+      kind="Deposit"
+      onDecide={decide}
+      tickers={tickers}
+    />
   );
 }
 
@@ -357,11 +410,13 @@ function DepositProofsTab({
   users,
   loading,
   refetch,
+  tickers,
 }: {
   items?: any[];
   users?: any[];
   loading: boolean;
   refetch: () => void | Promise<unknown>;
+  tickers?: Record<string, Ticker>;
 }) {
   const decideDeposit = useServerFn(decideAdminDeposit);
   const [creditCrypto, setCreditCrypto] = useState<Record<string, string>>({});
@@ -637,11 +692,13 @@ function WithdrawalsTab({
   users,
   loading,
   refetch,
+  tickers,
 }: {
   items?: any[];
   users?: any[];
   loading: boolean;
   refetch: () => void | Promise<unknown>;
+  tickers?: Record<string, Ticker>;
 }) {
   const decideWithdrawal = useServerFn(decideAdminWithdrawal);
   const decide = async (w: any, status: "approved" | "rejected") => {
@@ -661,6 +718,7 @@ function WithdrawalsTab({
       loading={loading}
       kind="Withdrawal"
       onDecide={decide}
+      tickers={tickers}
     />
   );
 }
@@ -671,12 +729,14 @@ function RequestList({
   loading,
   kind,
   onDecide,
+  tickers,
 }: {
   items?: any[];
   users?: any[];
   loading: boolean;
   kind: string;
   onDecide: (item: any, status: "approved" | "rejected") => void | Promise<void>;
+  tickers?: Record<string, Ticker>;
 }) {
   if (loading)
     return (
@@ -741,14 +801,32 @@ function RequestList({
             }
           }
 
+          const cryptoSymUpper = (it.crypto_currency ?? "USDT").toUpperCase();
+          const tick = tickers?.[cryptoSymUpper] || tickers?.[`${cryptoSymUpper}USDT`];
+          const liveUnitPrice =
+            cryptoSymUpper === "USDT" || cryptoSymUpper === "USDC" ? 1.0 : (tick?.price ?? 0);
+          const liveUsdVal = liveUnitPrice > 0 ? Number(it.amount) * liveUnitPrice : 0;
+
           return (
             <div
               key={it.id}
               className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm"
             >
               <div className="min-w-0 flex-1">
-                <div className="font-semibold tabular-nums">
-                  ${Number(it.amount).toFixed(2)} · {it.crypto_currency}
+                <div className="font-semibold tabular-nums flex flex-wrap items-center gap-2">
+                  <span>
+                    ${Number(it.amount).toFixed(2)} · {it.crypto_currency}
+                  </span>
+                  {liveUsdVal > 0 && cryptoSymUpper !== "USDT" && cryptoSymUpper !== "USDC" && (
+                    <span className="text-xs text-emerald-400 font-normal">
+                      (≈ $
+                      {liveUsdVal.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      Binance WS)
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground truncate">
                   {requestUser?.email ?? requestUser?.full_name ?? it.user_id}
@@ -818,10 +896,12 @@ function UsersTab({
   users,
   loading,
   refetch,
+  tickers,
 }: {
   users?: any[];
   loading: boolean;
   refetch: () => void | Promise<unknown>;
+  tickers?: Record<string, Ticker>;
 }) {
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids"],
@@ -848,7 +928,13 @@ function UsersTab({
   return (
     <div className="space-y-3">
       {users?.map((u: any) => (
-        <UserRow key={u.id} user={u} isAdminUser={adminIds.has(u.id)} onChange={reload} />
+        <UserRow
+          key={u.id}
+          user={u}
+          isAdminUser={adminIds.has(u.id)}
+          onChange={reload}
+          tickers={tickers}
+        />
       ))}
       {!users?.length && <Card className="p-6 text-sm text-muted-foreground">No users yet.</Card>}
     </div>
@@ -960,10 +1046,12 @@ function UserRow({
   user,
   isAdminUser,
   onChange,
+  tickers,
 }: {
   user: any;
   isAdminUser?: boolean;
   onChange: () => void | Promise<unknown>;
+  tickers?: Record<string, Ticker>;
 }) {
   const saveUserChart = useServerFn(updateAdminChart);
   const adjustBalance = useServerFn(adjustAdminBalance);
@@ -976,6 +1064,32 @@ function UserRow({
   const [cryptoSym, setCryptoSym] = useState("BTC");
   const [cryptoQty, setCryptoQty] = useState("");
   const [showChart, setShowChart] = useState(false);
+
+  const liveCryptoUsd = useMemo(() => {
+    const jsonCrypto = ((user as any)?.crypto_balances ?? {}) as Record<string, number>;
+    let totalUsd = 0;
+    const symbols = Array.from(new Set([...Object.keys(jsonCrypto)]));
+
+    symbols.forEach((sym) => {
+      const symUpper = sym.toUpperCase();
+      const qty = Number(jsonCrypto[sym] ?? 0);
+      if (qty > 0) {
+        const tick = tickers?.[symUpper] || tickers?.[`${symUpper}USDT`];
+        const p = symUpper === "USDT" || symUpper === "USDC" ? 1.0 : (tick?.price ?? 0);
+        if (p > 0) {
+          totalUsd += qty * p;
+        }
+      }
+    });
+
+    return totalUsd > 0 ? totalUsd : Number(user.crypto_usd_balance ?? 0);
+  }, [user, tickers]);
+
+  const curSymUpper = cryptoSym.toUpperCase();
+  const curTick = tickers?.[curSymUpper] || tickers?.[`${curSymUpper}USDT`];
+  const curPrice = curSymUpper === "USDT" || curSymUpper === "USDC" ? 1.0 : (curTick?.price ?? 0);
+  const qtyVal = Number(cryptoQty || 0);
+  const estDirectUsd = qtyVal * curPrice;
 
   const saveChart = async () => {
     try {
@@ -1115,9 +1229,22 @@ function UserRow({
           <div className="text-xs text-muted-foreground">
             Country: {user.country ?? "Australia"}
           </div>
-          <div className="mt-1 text-sm tabular-nums">
-            Live: ${Number(user.live_balance ?? 0).toFixed(2)} · Demo: $
-            {Number(user.demo_balance ?? 0).toFixed(2)}
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold tabular-nums">
+            <span className="text-blue-400">
+              Cash: $
+              {Number(user.cash_balance ?? user.available_cash ?? user.live_balance ?? 0).toFixed(
+                2,
+              )}
+            </span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-amber-400">
+              Demo: ${Number(user.demo_balance ?? 0).toFixed(2)}
+            </span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-emerald-400 flex items-center gap-1">
+              <Activity className="h-3 w-3 text-emerald-400 animate-pulse" />
+              Crypto: ${liveCryptoUsd.toFixed(2)}
+            </span>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge
@@ -1295,6 +1422,22 @@ function UserRow({
               </Button>
             </div>
           </div>
+          {curPrice > 0 && (
+            <div className="mt-1 text-[11px] font-medium text-emerald-400 flex items-center gap-1">
+              <span>
+                1 {curSymUpper} = ${curPrice.toLocaleString()} (Binance WS)
+              </span>
+              {qtyVal > 0 && (
+                <span className="font-bold">
+                  · Total: $
+                  {estDirectUsd.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Card>
@@ -2346,7 +2489,7 @@ function AdminCopyTab() {
 }
 
 // ============ ADMIN PRE-MARKET TAB ============
-function AdminPreMarketTab() {
+function AdminPreMarketTab({ tickers }: { tickers?: Record<string, Ticker> }) {
   const { data: tokens } = useQuery({
     queryKey: ["admin_premarket_tokens"],
     queryFn: async () =>
@@ -2499,7 +2642,7 @@ function AdminAnnouncementsTab() {
 }
 
 // ============ ADMIN SIGNALS TAB ============
-function AdminSignalsTab() {
+function AdminSignalsTab({ tickers }: { tickers?: Record<string, Ticker> }) {
   const { data: signals } = useQuery({
     queryKey: ["admin_signals_list"],
     queryFn: async () =>
@@ -2514,44 +2657,62 @@ function AdminSignalsTab() {
   });
   return (
     <Card className="p-4">
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
-        <Radio className="h-4 w-4 text-primary" /> Trading Signals
+      <h2 className="mb-3 flex items-center justify-between text-lg font-semibold">
+        <span className="flex items-center gap-2">
+          <Radio className="h-4 w-4 text-primary" /> Trading Signals
+        </span>
+        <span className="text-xs font-normal text-muted-foreground flex items-center gap-1">
+          <Activity className="h-3 w-3 text-emerald-400 animate-pulse" /> Live Binance WS Stream
+        </span>
       </h2>
       {!signals?.length ? (
         <p className="text-sm text-muted-foreground">None yet.</p>
       ) : (
         <div className="space-y-2">
-          {signals.map((s: any) => (
-            <div
-              key={s.id}
-              className="rounded-lg border border-border bg-surface px-4 py-3 text-sm"
-            >
-              <div className="flex items-center gap-2">
-                <Badge
-                  className={
-                    s.direction === "long"
-                      ? "bg-success/20 text-success"
-                      : "bg-destructive/20 text-destructive"
-                  }
-                >
-                  {s.direction}
-                </Badge>
-                <span className="font-semibold">{s.asset_pair}</span>
-                <Badge variant="secondary" className="text-[10px]">
-                  {s.leverage}
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  {Number(s.confidence).toFixed(0)}% confidence
-                </span>
+          {signals.map((s: any) => {
+            const pairClean = (s.asset_pair ?? "").replace("/", "").replace("-", "").toUpperCase();
+            const tick = tickers?.[pairClean] || tickers?.[`${pairClean}USDT`];
+            const livePrice = tick?.price ?? 0;
+
+            return (
+              <div
+                key={s.id}
+                className="rounded-lg border border-border bg-surface px-4 py-3 text-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      className={
+                        s.direction === "long"
+                          ? "bg-success/20 text-success"
+                          : "bg-destructive/20 text-destructive"
+                      }
+                    >
+                      {s.direction}
+                    </Badge>
+                    <span className="font-semibold">{s.asset_pair}</span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {s.leverage}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {Number(s.confidence).toFixed(0)}% confidence
+                    </span>
+                  </div>
+                  {livePrice > 0 && (
+                    <div className="text-xs font-mono font-bold text-emerald-400">
+                      Live: ${livePrice.toLocaleString()}
+                    </div>
+                  )}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Entry: {s.entry_low} - {s.entry_high} · SL: {s.stop_loss}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {new Date(s.created_at).toLocaleString()}
+                </div>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                Entry: {s.entry_low} - {s.entry_high} · SL: {s.stop_loss}
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {new Date(s.created_at).toLocaleString()}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       <p className="mt-3 text-xs text-muted-foreground">
@@ -2910,10 +3071,6 @@ function AdminRolesTab({
   refetch: () => void | Promise<unknown>;
 }) {
   const [q, setQ] = useState("");
-  const setRoleFn = useServerFn(setUserAdminRole);
-  const clearBalancesFn = useServerFn(clearAllBalances);
-  const [clearing, setClearing] = useState(false);
-
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids_full"],
     queryFn: async () => {
@@ -2941,35 +3098,7 @@ function AdminRolesTab({
     );
   }, [users, q]);
 
-  const admins = (users ?? []).filter(
-    (u: any) =>
-      u.email?.toLowerCase() === OWNER_EMAIL ||
-      u.is_admin ||
-      u.is_super_admin ||
-      u.role === "admin" ||
-      u.role === "super_admin" ||
-      adminSet.has(u.id),
-  );
-
-  const handleClearAllBalances = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to CLEAR ALL account balances (both cash and crypto) to $0 for ALL users across the database?",
-      )
-    ) {
-      return;
-    }
-    try {
-      setClearing(true);
-      const res = await clearBalancesFn();
-      toast.success(res.message || "All account balances cleared to $0!");
-      await reload();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to clear balances");
-    } finally {
-      setClearing(false);
-    }
-  };
+  const admins = (users ?? []).filter((u: any) => adminSet.has(u.id));
 
   if (loading)
     return (
@@ -2981,36 +3110,18 @@ function AdminRolesTab({
   return (
     <div className="space-y-4">
       <Card className="p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <KeyRound className="h-5 w-5" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                Role & system management
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Promote users to admin so they get full access to administrative features. Primary
-                Super Admin (<span className="font-mono">{OWNER_EMAIL}</span>) is protected at the
-                database level.
-              </p>
-            </div>
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <KeyRound className="h-5 w-5" />
           </div>
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={clearing}
-            onClick={handleClearAllBalances}
-            className="shrink-0 font-bold"
-          >
-            {clearing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
-            )}
-            Clear all balances to $0
-          </Button>
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold flex items-center gap-2">Role management</h2>
+            <p className="text-sm text-muted-foreground">
+              Promote users to admin so they get the same panel access you have. The Primary Super
+              Admin (<span className="font-mono">{OWNER_EMAIL}</span>) cannot be demoted or modified
+              by anyone else — enforced at the database level.
+            </p>
+          </div>
         </div>
       </Card>
 
@@ -3051,15 +3162,11 @@ function AdminRolesTab({
         </div>
         <div className="divide-y divide-border">
           {filtered.map((u: any) => {
-            const isOwner = u.email?.toLowerCase() === OWNER_EMAIL;
-            const isAdminUser = Boolean(
-              isOwner ||
-              u.is_admin ||
-              u.is_super_admin ||
-              u.role === "admin" ||
+            const isSuperAdmin =
+              u.email?.toLowerCase() === OWNER_EMAIL ||
               u.role === "super_admin" ||
-              adminSet.has(u.id),
-            );
+              Boolean(u.is_super_admin);
+            const isAdminUser = adminSet.has(u.id) || u.role === "admin" || u.is_admin;
             return (
               <div
                 key={u.id}
@@ -3067,7 +3174,7 @@ function AdminRolesTab({
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 font-semibold">
-                    {isOwner && <Crown className="h-3.5 w-3.5 text-primary" />}
+                    {isSuperAdmin && <Crown className="h-3.5 w-3.5 text-amber-400" />}
                     {u.full_name ?? "—"}
                     {isAdminUser && (
                       <Badge
@@ -3075,7 +3182,7 @@ function AdminRolesTab({
                         className="border-primary/40 text-primary text-[10px]"
                       >
                         <ShieldCheck className="mr-0.5 h-2.5 w-2.5" />
-                        Admin
+                        {isSuperAdmin ? "Super Admin" : "Admin"}
                       </Badge>
                     )}
                   </div>
@@ -3088,17 +3195,50 @@ function AdminRolesTab({
                     <span>Admin access</span>
                     <Switch
                       checked={isAdminUser}
-                      disabled={isOwner}
+                      disabled={isSuperAdmin}
                       onCheckedChange={async (checked) => {
+                        if (isSuperAdmin) {
+                          toast.error("Super Admin privileges cannot be modified or revoked.");
+                          return;
+                        }
                         try {
-                          const res = await setRoleFn({
-                            targetUserId: u.id,
-                            makeAdmin: checked,
-                          });
-                          toast.success(
-                            res.message ||
-                              (checked ? "Admin access granted" : "Admin access revoked"),
-                          );
+                          const fn = checked ? "admin_grant_admin" : "admin_revoke_admin";
+                          try {
+                            await supabase.rpc(fn as never, { _target: u.id } as never);
+                          } catch (rpcErr) {
+                            console.warn(
+                              "RPC grant/revoke failed, performing direct table updates:",
+                              rpcErr,
+                            );
+                          }
+
+                          // Update profiles table (grant standard admin, NOT super admin)
+                          await supabase
+                            .from("profiles")
+                            .update({
+                              role: checked ? "admin" : "user",
+                              is_admin: checked,
+                              is_super_admin: false,
+                            })
+                            .eq("id", u.id);
+
+                          // Update user_roles table
+                          if (checked) {
+                            await supabase
+                              .from("user_roles")
+                              .upsert(
+                                { user_id: u.id, role: "admin" },
+                                { onConflict: "user_id,role" },
+                              );
+                          } else {
+                            await supabase
+                              .from("user_roles")
+                              .delete()
+                              .eq("user_id", u.id)
+                              .eq("role", "admin");
+                          }
+
+                          toast.success(checked ? "Admin access granted" : "Admin access revoked");
                           await reload();
                         } catch (err: any) {
                           toast.error(err.message ?? "Could not update role");
