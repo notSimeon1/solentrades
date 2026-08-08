@@ -22,7 +22,7 @@ export function useRealtimeProfitEngine() {
           supabase
             .from("user_active_bots")
             .select(
-              "id, hourly_payout, daily_payout, current_profit, trading_bots(hourly_payout, daily_payout)",
+              "id, invested_amount, current_profit, trading_bots(hourly_payout, daily_payout)",
             )
             .eq("user_id", user.id)
             .or("status.eq.active,status.eq.running"),
@@ -41,10 +41,10 @@ export function useRealtimeProfitEngine() {
         let totalBotCredit = 0;
         const botUpdates = activeBots.map(async (bot: any) => {
           const tb = bot.trading_bots;
-          const hourly =
-            Number(bot.hourly_payout) ||
-            Number(tb?.hourly_payout) ||
-            (Number(bot.daily_payout) || Number(tb?.daily_payout) || 12) / 24;
+          const invested = Number(bot.invested_amount) || 500;
+          const hourlyFromTb = Number(tb?.hourly_payout) || 0;
+          const dailyFromTb = Number(tb?.daily_payout) || 0;
+          const hourly = hourlyFromTb || (dailyFromTb ? dailyFromTb / 24 : (invested * 0.1) / 24);
           const tickIncrement = Number((hourly / 360).toFixed(4));
           if (tickIncrement <= 0) return;
 
@@ -79,17 +79,34 @@ export function useRealtimeProfitEngine() {
         if (totalCredit > 0) {
           const { data: prof } = await supabase
             .from("profiles")
-            .select(balanceCol)
+            .select("live_balance, account_balance, available_cash, demo_balance")
             .eq("id", user.id)
             .single();
 
-          const currentBal = Number((prof as any)?.[balanceCol] ?? 0);
-          const newBal = Number((currentBal + totalCredit).toFixed(4));
-
-          await supabase
-            .from("profiles")
-            .update({ [balanceCol]: newBal } as never)
-            .eq("id", user.id);
+          if (mode === "demo") {
+            const currentBal = Number((prof as any)?.demo_balance ?? 10000);
+            const newBal = Number((currentBal + totalCredit).toFixed(4));
+            await supabase
+              .from("profiles")
+              .update({ demo_balance: newBal } as never)
+              .eq("id", user.id);
+          } else {
+            const currentBal = Number(
+              (prof as any)?.live_balance ??
+                (prof as any)?.account_balance ??
+                (prof as any)?.available_cash ??
+                0,
+            );
+            const newBal = Number((currentBal + totalCredit).toFixed(4));
+            await supabase
+              .from("profiles")
+              .update({
+                live_balance: newBal,
+                account_balance: newBal,
+                available_cash: newBal,
+              } as never)
+              .eq("id", user.id);
+          }
 
           qc.invalidateQueries({ queryKey: ["profile"] });
           qc.invalidateQueries({ queryKey: ["my_active_bots"] });

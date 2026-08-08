@@ -32,8 +32,11 @@ export function LiveChatWidget() {
   const rafId = useRef<number | null>(null);
   const pointerIdRef = useRef<number | null>(null);
 
-  // Initialize position from localStorage
+  // Initialize position from localStorage & listen for support chat open trigger
   useEffect(() => {
+    const handleOpenSupport = () => setOpen(true);
+    window.addEventListener("open-support-chat", handleOpenSupport);
+
     let initial = { left: 0, top: 0 };
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -59,6 +62,10 @@ export function LiveChatWidget() {
 
     posRef.current = initial;
     setPos(initial);
+
+    return () => {
+      window.removeEventListener("open-support-chat", handleOpenSupport);
+    };
   }, []);
 
   // Window resize protection

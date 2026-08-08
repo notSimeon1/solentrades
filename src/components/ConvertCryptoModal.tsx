@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RefreshCw, Sparkles, DollarSign, ArrowRight, ShieldCheck } from "lucide-react";
+import { RefreshCw, Sparkles, DollarSign } from "lucide-react";
 import { CryptoIcon } from "@/components/CryptoIcon";
 
 const SUPPORTED_CRYPTO = [
@@ -63,7 +63,7 @@ export function ConvertCryptoModal({
   defaultSymbol = "ALL",
 }: ConvertCryptoModalProps) {
   const { user } = useAuth();
-  const { formatCurrency, currencyInfo } = useCurrency();
+  const { formatCurrency } = useCurrency();
   const qc = useQueryClient();
   const { tickers } = useBinancePrices(PRICE_SYMBOLS);
   const [selectedSymbol, setSelectedSymbol] = useState<string>(defaultSymbol);
@@ -83,14 +83,14 @@ export function ConvertCryptoModal({
     enabled: !!user && open,
   });
 
-  // Fetch profile for live_balance & json crypto_balances
+  // Fetch profile for json crypto_balances
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
       const { data } = await supabase
         .from("profiles")
-        .select("live_balance, crypto_balances")
+        .select("crypto_balances, is_suspended")
         .eq("id", user.id)
         .maybeSingle();
       return data;
@@ -123,22 +123,30 @@ export function ConvertCryptoModal({
     });
   }, [wallets, profile, tickers]);
 
-  // Target conversion items based on dropdown selection
+  // Target conversion items (excl USDT since target is USDT)
   const conversionItems = useMemo(() => {
     if (selectedSymbol === "ALL") {
-      return holdings.filter((h) => h.qty > 0);
+      return holdings.filter((h) => h.symbol !== "USDT" && h.qty > 0);
     }
-    return holdings.filter((h) => h.symbol === selectedSymbol && h.qty > 0);
+    return holdings.filter((h) => h.symbol === selectedSymbol && h.symbol !== "USDT" && h.qty > 0);
   }, [holdings, selectedSymbol]);
 
   const totalUsdToCredit = useMemo(() => {
     return conversionItems.reduce((acc, item) => acc + item.usdValue, 0);
   }, [conversionItems]);
 
+  const nonUsdtHoldingsValue = useMemo(() => {
+    return holdings.filter((h) => h.symbol !== "USDT").reduce((sum, h) => sum + h.usdValue, 0);
+  }, [holdings]);
+
   const handleConvert = async () => {
     if (!user) return;
+    if ((profile as any)?.is_suspended) {
+      toast.error("Account suspended — conversion is disabled. Contact support.");
+      return;
+    }
     if (conversionItems.length === 0 || totalUsdToCredit <= 0) {
-      toast.error("No active crypto holdings available to convert.");
+      toast.error("No non-USDT crypto holdings available to convert.");
       return;
     }
 
@@ -147,9 +155,6 @@ export function ConvertCryptoModal({
     soundFX.triggerHaptic(30);
 
     try {
-      const currentLiveBalance = Number(profile?.live_balance ?? 0);
-      const newLiveBalance = Number((currentLiveBalance + totalUsdToCredit).toFixed(2));
-
       const updatedJson = {
         ...(((profile as { crypto_balances?: Record<string, number> })?.crypto_balances ??
           {}) as Record<string, number>),
@@ -172,11 +177,35 @@ export function ConvertCryptoModal({
         updatedJson[item.symbol] = 0;
       }
 
-      // 1. Update live balance & crypto_balances JSON in profile
+      // Add total converted value to USDT balance
+      const currentUsdtInRows = (wallets ?? []).find(
+        (w: Record<string, unknown>) =>
+          String(w.asset_symbol || w.symbol || "").toUpperCase() === "USDT",
+      );
+      const currentUsdtQty = Math.max(
+        Number(currentUsdtInRows?.balance ?? 0),
+        Number(updatedJson["USDT"] ?? 0),
+      );
+
+      const newUsdtQty = Number((currentUsdtQty + totalUsdToCredit).toFixed(6));
+
+      // Upsert USDT in user_crypto_balances
+      await supabase.from("user_crypto_balances").upsert(
+        {
+          user_id: user.id,
+          asset_symbol: "USDT",
+          balance: newUsdtQty,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,asset_symbol" },
+      );
+
+      updatedJson["USDT"] = newUsdtQty;
+
+      // 1. Update ONLY crypto_balances JSON in profiles table — DO NOT touch live_balance
       const { error: profErr } = await supabase
         .from("profiles")
         .update({
-          live_balance: newLiveBalance,
           crypto_balances: updatedJson as any,
         })
         .eq("id", user.id);
@@ -186,8 +215,8 @@ export function ConvertCryptoModal({
       // 2. Record transaction log
       const desc =
         conversionItems.length === 1
-          ? `Converted ${conversionItems[0].qty.toFixed(4)} ${conversionItems[0].symbol} to $${totalUsdToCredit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD Live Balance`
-          : `Converted all crypto holdings (${conversionItems.map((c) => `${c.qty.toFixed(4)} ${c.symbol}`).join(", ")}) to $${totalUsdToCredit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD Live Balance`;
+          ? `Converted ${conversionItems[0].qty.toFixed(4)} ${conversionItems[0].symbol} to ${totalUsdToCredit.toFixed(2)} USDT`
+          : `Converted crypto holdings (${conversionItems.map((c) => `${c.qty.toFixed(4)} ${c.symbol}`).join(", ")}) to ${totalUsdToCredit.toFixed(2)} USDT`;
 
       await supabase.from("transactions").insert({
         user_id: user.id,
@@ -200,9 +229,7 @@ export function ConvertCryptoModal({
       soundFX.playDepositBonus();
       soundFX.triggerHaptic(80);
 
-      toast.success(
-        `Converted crypto holdings to ${formatCurrency(totalUsdToCredit)} ${currencyInfo.code} Live Balance!`,
-      );
+      toast.success(`Converted crypto holdings to ${totalUsdToCredit.toFixed(2)} USDT!`);
 
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["my_crypto_wallets"] });
@@ -222,10 +249,10 @@ export function ConvertCryptoModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-black text-white">
             <RefreshCw className="h-5 w-5 text-emerald-400 animate-spin-slow" />
-            Convert Crypto to USD Live Balance
+            Convert Crypto to USDT
           </DialogTitle>
           <DialogDescription className="text-xs text-slate-300">
-            Instantly liquidate your crypto wallet holdings into usable USD Live Balance with 0%
+            Instantly convert your crypto holdings into USDT in your crypto wallet with 0%
             conversion fees.
           </DialogDescription>
         </DialogHeader>
@@ -242,22 +269,23 @@ export function ConvertCryptoModal({
               </SelectTrigger>
               <SelectContent className="bg-slate-900 border-slate-800 text-white">
                 <SelectItem value="ALL" className="font-bold text-emerald-400">
-                  ✨ Convert ALL Crypto Holdings (
-                  {formatCurrency(holdings.reduce((s, h) => s + h.usdValue, 0))})
+                  ✨ Convert ALL Crypto Holdings ({formatCurrency(nonUsdtHoldingsValue)})
                 </SelectItem>
-                {holdings.map((h) => (
-                  <SelectItem key={h.symbol} value={h.symbol} disabled={h.qty <= 0}>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-amber-300">
-                        {h.icon} {h.symbol}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        ({h.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} ={" "}
-                        {formatCurrency(h.usdValue)})
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
+                {holdings
+                  .filter((h) => h.symbol !== "USDT")
+                  .map((h) => (
+                    <SelectItem key={h.symbol} value={h.symbol} disabled={h.qty <= 0}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-amber-300">
+                          {h.icon} {h.symbol}
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          ({h.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} ={" "}
+                          {formatCurrency(h.usdValue)})
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
@@ -266,12 +294,12 @@ export function ConvertCryptoModal({
           <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3.5 space-y-2.5">
             <div className="text-xs font-bold text-slate-300 flex items-center justify-between border-b border-slate-800/80 pb-2">
               <span>Selected Asset(s)</span>
-              <span>USD Value</span>
+              <span>USDT Value</span>
             </div>
 
             {conversionItems.length === 0 ? (
               <p className="text-center text-xs text-amber-400/90 py-2">
-                No active crypto balance found for this selection.
+                No non-USDT crypto balance found for this selection.
               </p>
             ) : (
               conversionItems.map((item) => (
@@ -284,25 +312,16 @@ export function ConvertCryptoModal({
                     </span>
                   </div>
                   <span className="font-bold text-emerald-400 tabular-nums">
-                    +$
-                    {item.usdValue.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{" "}
-                    USD
+                    +${item.usdValue.toFixed(2)} USDT
                   </span>
                 </div>
               ))
             )}
 
             <div className="border-t border-slate-800 pt-2 flex items-center justify-between text-sm">
-              <span className="font-extrabold text-slate-200">Total Live Balance Credit:</span>
+              <span className="font-extrabold text-slate-200">Total USDT Credited:</span>
               <span className="font-black text-emerald-400 text-base tabular-nums">
-                +$
-                {totalUsdToCredit.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                +${totalUsdToCredit.toFixed(2)} USDT
               </span>
             </div>
           </div>
@@ -313,9 +332,9 @@ export function ConvertCryptoModal({
               <DollarSign className="h-5 w-5" />
             </div>
             <div className="text-xs">
-              <div className="font-bold text-emerald-300">Credited to Live Trading Balance</div>
+              <div className="font-bold text-emerald-300">Credited to USDT Crypto Wallet</div>
               <div className="text-slate-400">
-                Instantly usable for live orders, margin trading, signals & withdrawals.
+                Instantly usable for AI bots, trading orders, and withdrawals.
               </div>
             </div>
           </div>
@@ -340,7 +359,7 @@ export function ConvertCryptoModal({
             ) : (
               <Sparkles className="h-4 w-4 mr-2" />
             )}
-            {isConverting ? "Converting..." : "Convert to Live Balance"}
+            {isConverting ? "Converting..." : "Convert to USDT"}
           </Button>
         </div>
       </DialogContent>

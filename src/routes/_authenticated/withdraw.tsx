@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { useAccountMode } from "@/lib/account-mode-context";
+import { useCurrency } from "@/lib/currency-context";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +46,7 @@ function WithdrawPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("available_cash")
+        .select("live_balance, account_balance, available_cash")
         .eq("id", user!.id)
         .maybeSingle();
       return data;
@@ -65,11 +67,17 @@ function WithdrawPage() {
     enabled: !!user,
   });
 
-  const available = Number(profile?.available_cash ?? 0);
+  const { fiatLiveBalance, cryptoBalance, liveBalance } = useAccountMode();
+  const { formatCurrency } = useCurrency();
+  const available = fiatLiveBalance;
   const fee = Number(amount) * 0.2;
   const net = Number(amount) - fee;
 
   const submit = async () => {
+    if (profile?.is_suspended) {
+      toast.error("Account suspended — withdrawals are locked. Contact customer support.");
+      return;
+    }
     const amt = Number(amount);
     if (!amt || amt <= 0) return toast.error("Enter a valid amount");
     if (amt > available) return toast.error("Amount exceeds available balance");
@@ -144,12 +152,48 @@ function WithdrawPage() {
         </div>
       </Card>
 
+      {/* 10-DAY PROCESSING TIMELINE NOTICE */}
+      <Card className="p-4 border-sky-500/40 bg-gradient-to-r from-sky-950/80 via-slate-900 to-indigo-950/80 rounded-2xl shadow-lg shadow-sky-950/30">
+        <div className="flex items-start gap-3.5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
+            <Clock className="h-5 w-5" />
+          </div>
+          <div className="text-sm space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="font-black text-sky-300 text-sm uppercase tracking-wider">
+                Processing Timeline Notice
+              </span>
+              <Badge className="bg-sky-500/20 text-sky-300 border-sky-500/30 text-[10px] font-bold">
+                Up to 10 Days
+              </Badge>
+            </div>
+            <p className="text-slate-200 text-xs leading-relaxed">
+              Withdrawals take <strong>up to 10 days</strong> to process and clear internal security
+              protocols. Please remain calm while our payout and compliance desk processes your
+              request in order of queue.
+            </p>
+          </div>
+        </div>
+      </Card>
+
       <Card className="p-6 space-y-5">
-        <div className="rounded-lg bg-surface p-3 text-sm">
-          Available:{" "}
-          <span className="font-semibold tabular-nums">
-            ${available.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-          </span>
+        <div className="rounded-xl border border-border/80 bg-surface/80 p-3.5 space-y-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+            <span className="font-bold text-blue-400">Cash Balance (Available to Withdraw):</span>
+            <span className="font-extrabold text-sm text-foreground tabular-nums">
+              {formatCurrency(available)}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
+            <span>
+              Crypto Holdings:{" "}
+              <strong className="text-emerald-400">{formatCurrency(cryptoBalance)}</strong>
+            </span>
+            <span>
+              Total Live Balance:{" "}
+              <strong className="text-foreground">{formatCurrency(liveBalance)}</strong>
+            </span>
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

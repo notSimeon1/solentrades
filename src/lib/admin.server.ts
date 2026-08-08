@@ -127,18 +127,27 @@ async function updateProfileBalance(
 ) {
   const next: Record<string, number | string> = { updated_at: new Date().toISOString() };
   if (mode === "live" || mode === "both") {
-    next.account_balance = money(profile.account_balance) + delta;
-    next.available_cash = money(profile.available_cash) + delta;
-    next.live_balance = Math.max(0, money(profile.live_balance) + delta);
+    const rawLive = profile.live_balance ?? profile.account_balance ?? profile.available_cash ?? 0;
+    const curLive = money(rawLive);
+    const newLive = money(curLive + delta);
+    if (newLive < 0) {
+      throw new Error(
+        `This would make the user's live balance negative ($${curLive.toFixed(2)} available)`,
+      );
+    }
+    next.live_balance = newLive;
+    next.account_balance = newLive;
+    next.available_cash = newLive;
   }
-  if (mode === "demo" || mode === "both")
-    next.demo_balance = Math.max(0, money(profile.demo_balance) + delta);
-  if (
-    money(next.account_balance) < 0 ||
-    money(next.available_cash) < 0 ||
-    money(next.demo_balance) < 0
-  ) {
-    throw new Error("This would make the user's balance negative");
+  if (mode === "demo" || mode === "both") {
+    const curDemo = money(profile.demo_balance);
+    const newDemo = money(curDemo + delta);
+    if (newDemo < 0) {
+      throw new Error(
+        `This would make the user's demo balance negative ($${curDemo.toFixed(2)} available)`,
+      );
+    }
+    next.demo_balance = newDemo;
   }
   const { error } = await (supabaseAdmin as any).from("profiles").update(next).eq("id", userId);
   if (error) throw new Error(error.message);
@@ -159,22 +168,28 @@ export async function assertOwner(userId: string) {
     // Ignore auth error and check role
   }
 
-  const { data: roleRow, error: roleError } = await supabaseAdmin
+  const { data: roleRow } = await supabaseAdmin
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .eq("role", "admin")
+    .in("role", ["admin", "super_admin"])
     .maybeSingle();
-  if (roleError) throw new Error(roleError.message);
   if (roleRow) return;
 
   const { data: profile } = await supabaseAdmin
     .from("profiles")
-    .select("is_admin, is_super_admin")
+    .select("is_admin, is_super_admin, role")
     .eq("id", userId)
     .maybeSingle();
 
-  if (profile?.is_admin || profile?.is_super_admin) return;
+  if (
+    profile?.is_admin ||
+    profile?.is_super_admin ||
+    profile?.role === "admin" ||
+    profile?.role === "super_admin"
+  ) {
+    return;
+  }
 
   throw new Error("Admin access is restricted to authorized admin accounts");
 }
@@ -325,7 +340,84 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
       .eq("status", "pending");
     if (updateError) throw new Error(updateError.message);
 
-    await updateProfileBalance(deposit.user_id, profile, amount, "live");
+    const rawCurr = String(deposit.crypto_currency || "USDT").toUpperCase();
+    const isCrypto =
+      rawCurr.includes("USDT") ||
+      rawCurr.includes("BTC") ||
+      rawCurr.includes("ETH") ||
+      rawCurr.includes("SOL") ||
+      rawCurr.includes("BNB") ||
+      rawCurr.includes("XRP") ||
+      rawCurr.includes("ADA") ||
+      rawCurr.includes("DOGE") ||
+      rawCurr.includes("MNT") ||
+      rawCurr.includes("TRC") ||
+      rawCurr.includes("BEP") ||
+      rawCurr.includes("ERC");
+
+    if (isCrypto) {
+      const sym = rawCurr.includes("BTC")
+        ? "BTC"
+        : rawCurr.includes("ETH")
+          ? "ETH"
+          : rawCurr.includes("SOL")
+            ? "SOL"
+            : rawCurr.includes("BNB")
+              ? "BNB"
+              : rawCurr.includes("XRP")
+                ? "XRP"
+                : rawCurr.includes("ADA")
+                  ? "ADA"
+                  : rawCurr.includes("DOGE")
+                    ? "DOGE"
+                    : rawCurr.includes("MNT")
+                      ? "MNT"
+                      : "USDT";
+
+      const qty = Number(deposit.amount) || 0;
+
+      // 1. Update user_crypto_balances
+      const { data: existingBal } = await supabaseAdmin
+        .from("user_crypto_balances")
+        .select("balance")
+        .eq("user_id", deposit.user_id)
+        .eq("asset_symbol", sym)
+        .maybeSingle();
+
+      const currentQty = Number(existingBal?.balance ?? 0);
+      const newQty = Number((currentQty + qty).toFixed(6));
+
+      await supabaseAdmin.from("user_crypto_balances").upsert(
+        {
+          user_id: deposit.user_id,
+          asset_symbol: sym,
+          balance: newQty,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,asset_symbol" },
+      );
+
+      // 2. Update profiles.crypto_balances JSONB
+      const { data: prof } = await supabaseAdmin
+        .from("profiles")
+        .select("crypto_balances")
+        .eq("id", deposit.user_id)
+        .maybeSingle();
+
+      const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
+      const updatedJson = {
+        ...currentJson,
+        [sym]: Number(((currentJson[sym] ?? 0) + qty).toFixed(6)),
+      };
+
+      await supabaseAdmin
+        .from("profiles")
+        .update({ crypto_balances: updatedJson as any } as never)
+        .eq("id", deposit.user_id);
+    } else {
+      // Fiat USD Deposit -> credit Live Balance
+      await updateProfileBalance(deposit.user_id, profile, amount, "live");
+    }
     await syncPendingActivity(
       deposit.user_id,
       "deposit_request",
@@ -415,8 +507,11 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
       .maybeSingle();
     if (profileError) throw new Error(profileError.message);
     if (!profile) throw new Error("User profile not found");
-    if (money(profile.available_cash) < amount)
-      throw new Error("User has insufficient available cash");
+    const userAvail = money(
+      profile.live_balance ?? profile.account_balance ?? profile.available_cash ?? 0,
+    );
+    if (userAvail < amount)
+      throw new Error(`User has insufficient available cash ($${userAvail.toFixed(2)} available)`);
 
     const { error: updateError } = await supabaseAdmin
       .from("withdrawals")
@@ -751,6 +846,76 @@ export async function adminSavePlatformSetting(
     .upsert(row as never, { onConflict: "key_name" });
   if (error) throw new Error(error.message);
   return { ok: true };
+}
+
+export async function adminReconcileLedger(userId: string, targetUserId?: string) {
+  await assertOwner(userId);
+  let query = supabaseAdmin
+    .from("profiles")
+    .select("id, live_balance, account_balance, available_cash, crypto_balances");
+  if (targetUserId) {
+    query = query.eq("id", targetUserId);
+  }
+  const { data: profiles, error } = await query;
+  if (error) throw new Error(error.message);
+
+  let updatedCount = 0;
+  for (const prof of profiles || []) {
+    const rawLive = Math.max(
+      money(prof.live_balance),
+      money(prof.account_balance),
+      money(prof.available_cash),
+    );
+
+    // Sync user_crypto_balances with profiles.crypto_balances JSON
+    const { data: cryptoRows } = await supabaseAdmin
+      .from("user_crypto_balances")
+      .select("asset_symbol, balance")
+      .eq("user_id", prof.id);
+
+    const jsonMap = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
+    const mergedCrypto: Record<string, number> = { ...jsonMap };
+
+    (cryptoRows || []).forEach((row: any) => {
+      const sym = String(row.asset_symbol).toUpperCase();
+      mergedCrypto[sym] = Math.max(mergedCrypto[sym] ?? 0, Number(row.balance ?? 0));
+    });
+
+    // Update profile
+    await supabaseAdmin
+      .from("profiles")
+      .update({
+        live_balance: rawLive,
+        account_balance: rawLive,
+        available_cash: rawLive,
+        crypto_balances: mergedCrypto as any,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", prof.id);
+
+    // Ensure user_crypto_balances upserted
+    for (const [sym, qty] of Object.entries(mergedCrypto)) {
+      if (qty > 0) {
+        await supabaseAdmin.from("user_crypto_balances").upsert(
+          {
+            user_id: prof.id,
+            asset_symbol: sym,
+            balance: qty,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,asset_symbol" },
+        );
+      }
+    }
+
+    updatedCount++;
+  }
+
+  return {
+    ok: true,
+    count: updatedCount,
+    message: `Reconciled ${updatedCount} user account ledgers successfully.`,
+  };
 }
 
 // Make deposit/withdrawal functions use dynamic rates from platform_settings

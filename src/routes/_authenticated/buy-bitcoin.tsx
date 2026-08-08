@@ -179,6 +179,20 @@ function BuyBitcoinPage() {
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_EXPIRY_SECONDS);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const { data: profile } = useQuery({
+    queryKey: ["profile", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data } = await supabase
+        .from("profiles")
+        .select("is_suspended")
+        .eq("id", user.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user,
+  });
+
   // Load dynamic platform settings (public read, cached 5 min)
   const { data: siteSettings } = useQuery<Record<string, string>>({
     queryKey: ["platform_settings_public"],

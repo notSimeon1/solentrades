@@ -68,7 +68,7 @@ const OWNER_EMAIL = "simonosawaru255@gmail.com";
 
 export function Navbar() {
   const { user, signOut } = useAuth();
-  const { mode, balance } = useAccountMode();
+  const { mode, balance, fiatLiveBalance, cryptoBalance } = useAccountMode();
   const { currency, setCurrency, currencyInfo, formatCurrency } = useCurrency();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -106,15 +106,30 @@ export function Navbar() {
       setIsAdmin(true);
       return;
     }
-    supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .then(({ data }) => {
-        setIsAdmin(
-          (data ?? []).some((r) => r.role === "admin") || user.email?.toLowerCase() === OWNER_EMAIL,
+    (async () => {
+      try {
+        const [{ data: roles }, { data: prof }] = await Promise.all([
+          supabase.from("user_roles").select("role").eq("user_id", user.id),
+          supabase
+            .from("profiles")
+            .select("role, is_admin, is_super_admin")
+            .eq("id", user.id)
+            .maybeSingle(),
+        ]);
+        const hasRole = (roles ?? []).some(
+          (r: any) => r.role === "admin" || r.role === "super_admin",
         );
-      });
+        const hasProf = Boolean(
+          prof?.is_admin ||
+          prof?.is_super_admin ||
+          prof?.role === "admin" ||
+          prof?.role === "super_admin",
+        );
+        setIsAdmin(hasRole || hasProf || user.email?.toLowerCase() === OWNER_EMAIL);
+      } catch (e) {
+        console.warn("Navbar admin check failed:", e);
+      }
+    })();
   }, [user]);
 
   const sections: { title: string; items: NavItem[] }[] = [
@@ -315,7 +330,14 @@ export function Navbar() {
                 )}
               </button>
 
-              <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1">
+              <div
+                className="hidden sm:flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 cursor-default"
+                title={
+                  mode === "live"
+                    ? `Live Balance: ${formatCurrency(balance)}\nCash: ${formatCurrency(fiatLiveBalance)}\nCrypto: ${formatCurrency(cryptoBalance)}`
+                    : `Demo Balance: ${formatCurrency(balance)}`
+                }
+              >
                 <Wallet className="h-3.5 w-3.5 text-primary" />
                 <span className="text-sm font-bold tabular-nums">{formatCurrency(balance)}</span>
                 {mode === "demo" && (

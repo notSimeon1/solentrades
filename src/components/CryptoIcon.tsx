@@ -82,14 +82,12 @@ const BnbLogo: React.FC<{ className?: string }> = ({ className = "w-[60%] h-[60%
 );
 
 /* Tether USDT Vector SVG */
-const UsdtLogo: React.FC<{ className?: string }> = ({ className = "w-[60%] h-[60%]" }) => (
-  <svg viewBox="0 0 100 100" className={className} fill="none">
+const UsdtLogo: React.FC<{ className?: string }> = ({ className = "w-full h-full" }) => (
+  <svg viewBox="0 0 200 200" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="100" cy="100" r="100" fill="#26A17B" />
+    <path d="M52.8 50.4h94.4v22.4h-35.2v96.8H88V72.8H52.8V50.4z" fill="#FFFFFF" />
     <path
-      d="M50 0C22.4 0 0 22.4 0 50s22.4 50 50 50 50-22.4 50-50S77.6 0 50 0zm10.8 33.1v8.8h17.3v10.9H60.8v8c0 8.6-3.8 14.1-10.8 14.1s-10.8-5.5-10.8-14.1v-8H21.9V41.9h17.3v-8.8H18v-10.3h64v10.3H60.8z"
-      fill="#26A17B"
-    />
-    <path
-      d="M50 48.5c-9.1 0-16.5 2.1-16.5 4.8s7.4 4.8 16.5 4.8 16.5-2.1 16.5-4.8-7.4-4.8-16.5-4.8z"
+      d="M100 88.8c-32 0-58.4 4.8-58.4 10.8s26.4 10.8 58.4 10.8 58.4-4.8 58.4-10.8-26.4-10.8-58.4-10.8zm0 16.4c-25.2 0-45.6-3.4-45.6-5.6s20.4-5.6 45.6-5.6 45.6 3.4 45.6 5.6-20.4 5.6-45.6 5.6z"
       fill="#FFFFFF"
     />
   </svg>
@@ -157,10 +155,10 @@ export const CryptoIcon: React.FC<CryptoIconProps> = ({ symbol, className = "", 
   if (cleanSym === "USDT") {
     return (
       <div
-        className={`inline-flex shrink-0 items-center justify-center rounded-full border border-emerald-500/40 bg-[#0D1F1A] shadow-md shadow-emerald-500/20 ${sizeStyle} ${className}`}
+        className={`inline-flex shrink-0 items-center justify-center rounded-full overflow-hidden shadow-md shadow-emerald-500/20 ${sizeStyle} ${className}`}
         title="Tether USD"
       >
-        <UsdtLogo />
+        <UsdtLogo className="w-full h-full" />
       </div>
     );
   }

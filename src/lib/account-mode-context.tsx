@@ -11,6 +11,7 @@ type AccountModeContextValue = {
   balance: number;
   liveBalance: number;
   fiatLiveBalance: number;
+  cashBalance: number;
   cryptoBalance: number;
   demoBalance: number;
   switchMode: (next: AccountMode) => Promise<void>;
@@ -23,6 +24,7 @@ const AccountModeContext = createContext<AccountModeContextValue>({
   balance: 0,
   liveBalance: 0,
   fiatLiveBalance: 0,
+  cashBalance: 0,
   cryptoBalance: 0,
   demoBalance: 0,
   switchMode: async () => {},
@@ -143,7 +145,9 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
     try {
       const { data: prof } = await supabase
         .from("profiles")
-        .select("account_mode, live_balance, demo_balance, crypto_balances")
+        .select(
+          "account_mode, live_balance, account_balance, available_cash, demo_balance, crypto_balances",
+        )
         .eq("id", user.id)
         .maybeSingle();
 
@@ -153,7 +157,9 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
         .eq("user_id", user.id);
 
       const m = (prof?.account_mode as AccountMode) ?? "demo";
-      const fiatLive = Number(prof?.live_balance ?? 0);
+      const fiatLive = Number(
+        prof?.live_balance ?? prof?.account_balance ?? prof?.available_cash ?? 0,
+      );
       const demo = Number(prof?.demo_balance ?? 10000);
 
       const rowMap = new Map<string, number>();
@@ -162,12 +168,34 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
       });
       const jsonBalances = (prof?.crypto_balances ?? {}) as Record<string, number>;
 
+      const allCryptoSymbols = new Set<string>([
+        "BTC",
+        "ETH",
+        "BNB",
+        "SOL",
+        "XRP",
+        "ADA",
+        "DOGE",
+        "USDT",
+        ...Array.from(rowMap.keys()),
+        ...Object.keys(jsonBalances),
+      ]);
+
       let totalCryptoUsd = 0;
-      const symbols = ["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE", "USDT"];
-      symbols.forEach((sym) => {
-        const qty = Math.max(rowMap.get(sym) ?? 0, Number(jsonBalances[sym] ?? 0));
-        const p = prices[sym] ?? FALLBACK_PRICES[sym] ?? 1;
-        totalCryptoUsd += qty * p;
+      allCryptoSymbols.forEach((sym) => {
+        const symbolUpper = sym.toUpperCase();
+        const qty = Math.max(
+          rowMap.get(symbolUpper) ?? 0,
+          Number(jsonBalances[symbolUpper] ?? 0),
+          Number(jsonBalances[sym] ?? 0),
+        );
+        if (qty > 0) {
+          const p =
+            symbolUpper === "USDT"
+              ? 1.0
+              : (prices[symbolUpper] ?? FALLBACK_PRICES[symbolUpper] ?? 1.0);
+          totalCryptoUsd += qty * p;
+        }
       });
 
       const totalLive = Number((fiatLive + totalCryptoUsd).toFixed(2));
@@ -243,6 +271,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
         balance,
         liveBalance,
         fiatLiveBalance,
+        cashBalance: fiatLiveBalance,
         cryptoBalance,
         demoBalance,
         switchMode,

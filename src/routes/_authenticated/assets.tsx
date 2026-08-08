@@ -167,28 +167,39 @@ function AssetsPage() {
       <Card className="p-6 bg-morph">
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
-            <div className="text-xs text-muted-foreground">Total portfolio value</div>
+            <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Live Balance (Total)
+            </div>
             {isLoading ? (
               <Skeleton className="mt-2 h-9 w-40" />
             ) : (
-              <div className="mt-1 text-3xl font-black tabular-nums">
+              <div className="mt-1 text-3xl font-black tabular-nums text-foreground">
                 {formatCurrency(totalValue)}
               </div>
             )}
-          </div>
-          <div className="rounded-lg bg-surface p-3">
-            <div className="text-xs text-muted-foreground">
-              Live balance ({(mode ?? "live").toUpperCase()})
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              Sum of Cash Balance + Crypto Holdings
             </div>
-            <div className="mt-1 text-2xl font-bold tabular-nums">
+          </div>
+          <div className="rounded-xl bg-surface/80 border border-border/60 p-3.5">
+            <div className="text-xs font-bold text-blue-400 uppercase tracking-wider">
+              Cash Balance (USD)
+            </div>
+            <div className="mt-1 text-2xl font-bold tabular-nums text-foreground">
               {formatCurrency(fiatBalance)}
             </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              Available cash for trading
+            </div>
           </div>
-          <div className="rounded-lg bg-surface p-3">
-            <div className="text-xs text-muted-foreground">Crypto holdings</div>
-            <div className="mt-1 text-2xl font-bold tabular-nums text-success">
+          <div className="rounded-xl bg-surface/80 border border-border/60 p-3.5">
+            <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+              Crypto Holdings
+            </div>
+            <div className="mt-1 text-2xl font-bold tabular-nums text-emerald-400">
               {formatCurrency(totalCryptoValue)}
             </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">Valued in real-time</div>
           </div>
         </div>
       </Card>

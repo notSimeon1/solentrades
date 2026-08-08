@@ -10,6 +10,7 @@ import {
   adminGetPlatformSettings,
   adminSavePlatformSetting,
   adminPostNews,
+  adminReconcileLedger,
   adminToggleAiTrading,
   adminToggleAccountMode,
   adminToggleSuspend,
@@ -178,4 +179,10 @@ export const savePlatformSetting = createServerFn({ method: "POST" })
   .inputValidator((input) => platformSettingSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminSavePlatformSetting(context?.userId || "admin", data.keyName, data.value, data.category),
+  );
+
+export const reconcileAdminLedger = createServerFn({ method: "POST" })
+  .inputValidator((input?: { userId?: string }) => input)
+  .handler(async ({ data, context }) =>
+    adminReconcileLedger(context?.userId || "admin", data?.userId),
   );

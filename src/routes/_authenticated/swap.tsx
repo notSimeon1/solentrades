@@ -116,27 +116,9 @@ function InstantSwapPage() {
     return fromPrice / toPrice;
   }, [fromPrice, toPrice]);
 
-  // Available Balance for selected FromToken (checks both user_crypto_balances table & profile.crypto_balances JSON)
+  // Available Balance for selected token (USDT is treated as its own crypto token wallet, separate from live USD fiat balance)
   const getBalance = (symbol: string): number => {
     const symUpper = symbol.toUpperCase();
-    if (symUpper === "USDT") {
-      const fiatBal = Number(profile?.live_balance ?? 0);
-      const jsonBal = Number(
-        ((profile as { crypto_balances?: Record<string, number> })?.crypto_balances ?? {})?.USDT ??
-          0,
-      );
-      const found = (cryptoBalances ?? []).find(
-        (b: Record<string, unknown>) =>
-          String(b.asset_symbol || b.symbol || "").toUpperCase() === "USDT",
-      );
-      const rowBal = Number(
-        (found as { balance?: number; amount?: number })?.balance ??
-          (found as { balance?: number; amount?: number })?.amount ??
-          0,
-      );
-      return Math.max(fiatBal, jsonBal, rowBal);
-    }
-
     const jsonBalances = ((profile as { crypto_balances?: Record<string, number> })
       ?.crypto_balances ?? {}) as Record<string, number>;
     const jsonQty = Number(jsonBalances[symUpper] ?? 0);
@@ -151,7 +133,10 @@ function InstantSwapPage() {
         0,
     );
 
-    return Math.max(rowQty, jsonQty);
+    if (found) {
+      return Math.max(0, rowQty);
+    }
+    return Math.max(0, jsonQty);
   };
 
   const availableFromBalance = getBalance(fromSymbol);
@@ -188,25 +173,25 @@ function InstantSwapPage() {
 
     try {
       const currentFromBal = getBalance(fromSymbol);
-      const newFromBal = Math.max(0, currentFromBal - inputNum);
+      if (inputNum > currentFromBal) {
+        throw new Error(`Insufficient ${fromSymbol} balance.`);
+      }
 
+      const newFromBal = Number(Math.max(0, currentFromBal - inputNum).toFixed(8));
       const currentToBal = getBalance(toSymbol);
       const newToBal = Number((currentToBal + netOutput).toFixed(8));
 
-      // Prepare single updated JSON map for crypto_balances & live_balance
+      // 1. Prepare updated JSON map for crypto_balances
       const updatedJson = {
         ...(((profile as { crypto_balances?: Record<string, number> })?.crypto_balances ??
           {}) as Record<string, number>),
+        [fromSymbol]: newFromBal,
+        [toSymbol]: newToBal,
       };
-      let newLiveBalance = Number(profile?.live_balance ?? 0);
 
-      // 1. Process FromToken deduction
-      if (fromSymbol === "USDT") {
-        newLiveBalance = Math.max(0, newLiveBalance - inputNum);
-        updatedJson["USDT"] = newLiveBalance;
-      } else {
-        updatedJson[fromSymbol] = newFromBal;
-        await supabase.from("user_crypto_balances").upsert(
+      // 2. Upsert both asset symbols in user_crypto_balances table
+      await Promise.all([
+        supabase.from("user_crypto_balances").upsert(
           {
             user_id: user.id,
             asset_symbol: fromSymbol,
@@ -214,16 +199,8 @@ function InstantSwapPage() {
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id,asset_symbol" },
-        );
-      }
-
-      // 2. Process ToToken addition
-      if (toSymbol === "USDT") {
-        newLiveBalance = Number((newLiveBalance + netOutput).toFixed(2));
-        updatedJson["USDT"] = newLiveBalance;
-      } else {
-        updatedJson[toSymbol] = newToBal;
-        await supabase.from("user_crypto_balances").upsert(
+        ),
+        supabase.from("user_crypto_balances").upsert(
           {
             user_id: user.id,
             asset_symbol: toSymbol,
@@ -231,21 +208,20 @@ function InstantSwapPage() {
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id,asset_symbol" },
-        );
-      }
+        ),
+      ]);
 
-      // 3. Single consolidated profile update
+      // 3. Update profiles table crypto_balances JSON
       const { error: profErr } = await supabase
         .from("profiles")
         .update({
-          live_balance: newLiveBalance,
           crypto_balances: updatedJson as unknown as Record<string, number>,
         })
         .eq("id", user.id);
 
       if (profErr) throw profErr;
 
-      // 3. Record transaction log
+      // 4. Record transaction log
       await supabase.from("transactions").insert({
         user_id: user.id,
         type: "trade",

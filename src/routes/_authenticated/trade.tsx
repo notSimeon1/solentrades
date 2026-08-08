@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { useAccountMode } from "@/lib/account-mode-context";
 import { useCurrency } from "@/lib/currency-context";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ import { TradingChart, type Candle } from "@/components/TradingChart";
 import type { Time } from "lightweight-charts";
 import { useServerFn } from "@tanstack/react-start";
 import { closePosition, openPosition } from "@/lib/admin.functions";
+import { useBinancePrices } from "@/hooks/useBinancePrices";
 
 export const Route = createFileRoute("/_authenticated/trade")({
   component: Dashboard,
@@ -322,16 +324,24 @@ function Dashboard() {
     };
   }, [user?.id, qc]);
 
+  const {
+    liveBalance: totalLiveBalance,
+    fiatLiveBalance,
+    cryptoBalance,
+    demoBalance,
+  } = useAccountMode();
   const mode = (profile?.chart_mode ?? "flat") as ChartMode;
   const intensity = Number(profile?.chart_intensity ?? 1);
   const seed = Number(profile?.chart_seed ?? 42);
   const accountMode = (profile?.account_mode ?? "demo") as "demo" | "live";
-  const liveBalance = Number(profile?.live_balance ?? 0);
-  const demoBalance = Number(profile?.demo_balance ?? 10000);
-  const usableBalance = accountMode === "live" ? liveBalance : demoBalance;
+  const cashBalance = fiatLiveBalance;
+  const usableBalance = accountMode === "live" ? cashBalance : demoBalance;
   const kycStatus = (profile?.kyc_status ?? "none") as string;
   const aiTradingEnabled = Boolean((profile as any)?.ai_trading_enabled);
   const isSuspended = Boolean(profile?.is_suspended);
+
+  const binanceSyms = useMemo(() => ["BTCUSDT", "ETHUSDT", "SOLUSDT"], []);
+  const { tickers } = useBinancePrices(binanceSyms);
 
   const switchMode = async (next: "demo" | "live") => {
     if (!user?.id || next === accountMode) return;
@@ -370,17 +380,31 @@ function Dashboard() {
     }
   }, [assetSym, mode, intensity, seed, asset.sym, asset.base]);
 
-  // Live tick: append a new candle every 3s
+  // Live tick: update or append new candle using live Binance ticker or mode drift
   useEffect(() => {
     const id = setInterval(() => {
       setCandles((prev) => {
+        if (!prev || prev.length === 0) return prev;
         const last = prev[prev.length - 1];
-        const next = nextCandle(last, asset.base, mode, intensity, randRef.current);
-        return [...prev.slice(-200), next];
+        const bSym = BINANCE_KLINE_MAP[asset.sym];
+        const livePrice = bSym ? tickers[bSym]?.price : undefined;
+
+        if (mode === "live" && livePrice && livePrice > 0) {
+          const updatedLast = {
+            ...last,
+            close: livePrice,
+            high: Math.max(last.high, livePrice),
+            low: Math.min(last.low, livePrice),
+          };
+          return [...prev.slice(0, -1), updatedLast];
+        } else {
+          const next = nextCandle(last, asset.base, mode, intensity, randRef.current);
+          return [...prev.slice(-200), next];
+        }
       });
-    }, 3000);
+    }, 2500);
     return () => clearInterval(id);
-  }, [asset.base, mode, intensity]);
+  }, [asset.base, asset.sym, mode, intensity, tickers]);
 
   const lastPrice = candles[candles.length - 1]?.close ?? asset.base;
   const firstPrice = candles[0]?.close ?? asset.base;
@@ -527,6 +551,7 @@ function Dashboard() {
 
         // ===== Entry logic — only when no open position =====
         if (open.length > 0) return;
+        if (isSuspended && accountMode === "live") return;
         const now = Date.now();
         if (now - aiStateRef.current.lastTradeAt < 8_000) return; // cooldown
         if (now - aiStateRef.current.lastLossAt < 20_000) return; // post-loss pause
@@ -586,7 +611,8 @@ function Dashboard() {
     candles,
     assetSym,
     accountMode,
-    liveBalance,
+    isSuspended,
+    cashBalance,
     demoBalance,
     openPositionFn,
     closePositionFn,
@@ -728,26 +754,23 @@ function Dashboard() {
         </Card>
       </motion.div>
 
-      {/* Mini balance cards (always show both so user sees real funds) */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+      {/* Mini balance cards */}
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
         <BalanceCard
-          label="Live balance"
-          value={liveBalance}
+          label="Live balance (Total)"
+          value={totalLiveBalance}
           Icon={TrendingUp}
           accent="success"
           active={accountMode === "live"}
         />
+        <BalanceCard label="Cash balance (USD)" value={cashBalance} Icon={DollarSign} />
+        <BalanceCard label="Crypto holdings" value={cryptoBalance} Icon={Wallet} />
         <BalanceCard
           label="Demo balance"
           value={demoBalance}
           Icon={Activity}
           accent="muted"
           active={accountMode === "demo"}
-        />
-        <BalanceCard
-          label="Available cash"
-          value={Number(profile?.available_cash ?? 0)}
-          Icon={DollarSign}
         />
       </div>
 

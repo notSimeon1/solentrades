@@ -29,6 +29,7 @@ import {
   ArrowRight,
   Timer,
   Flame,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -187,10 +188,38 @@ function BotCard({
   mode: "demo" | "live";
 }) {
   const { user } = useAuth();
+  const { fiatLiveBalance } = useAccountMode();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(String(bot.capital_required));
+  const [currencyPool, setCurrencyPool] = useState<"USD" | "USDT">("USD");
   const [busy, setBusy] = useState(false);
+
+  const { data: usdtBalance = 0 } = useQuery({
+    queryKey: ["usdt_balance_bot_card", user?.id],
+    queryFn: async () => {
+      if (!user) return 0;
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("crypto_balances")
+        .eq("id", user.id)
+        .maybeSingle();
+      const { data: cryptoRow } = await supabase
+        .from("user_crypto_balances")
+        .select("balance")
+        .eq("user_id", user.id)
+        .eq("asset_symbol", "USDT")
+        .maybeSingle();
+      const jsonVal = Number((prof?.crypto_balances as any)?.USDT ?? 0);
+      const rowVal = Number(cryptoRow?.balance ?? 0);
+      return Math.max(jsonVal, rowVal);
+    },
+    enabled: !!user && mode === "live",
+    staleTime: 5000,
+  });
+
+  const activePoolBalance =
+    mode === "demo" ? balance : currencyPool === "USD" ? fiatLiveBalance : usdtBalance;
 
   const gradient = TIER_COLORS[bot.tier_key] ?? "from-primary to-primary/80";
   const minRoi = Number(bot.min_roi);
@@ -206,92 +235,124 @@ function BotCard({
   const roiMultiple = totalReturn / Number(bot.capital_required);
 
   const activate = async () => {
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("is_suspended")
+      .eq("id", user!.id)
+      .maybeSingle();
+    if (prof?.is_suspended) {
+      toast.error("Account suspended — AI bot activation is restricted. Contact support.");
+      return;
+    }
     const usd = Number(amount);
     if (!usd || usd < bot.capital_required) {
       toast.error(`Minimum investment is $${bot.capital_required}`);
       return;
     }
-    if (usd > balance) {
-      toast.error("Insufficient balance");
+
+    if (activePoolBalance < usd) {
+      toast.error(
+        `Insufficient liquidity in ${currencyPool} pool. Required: $${usd}, Available: $${activePoolBalance.toFixed(2)} ${currencyPool}`,
+      );
       return;
     }
+
     setBusy(true);
     try {
-      // 1. Try resilient server function using service role
+      // 1. Call server function using service role
       const res = await activateBotServerFn({
         data: {
           userId: user!.id,
           botId: bot.id,
           amount: usd,
           mode,
+          currencyPool,
         },
       });
 
-      if (res && res.success) {
-        toast.success(`${bot.name} activated! Payouts will accrue automatically.`);
-        qc.invalidateQueries({ queryKey: ["my_active_bots"] });
-        qc.invalidateQueries({ queryKey: ["profile"] });
-        qc.invalidateQueries({ queryKey: ["transactions"] });
-        setOpen(false);
-        return;
+      if (res) {
+        if (res.success) {
+          toast.success(`${bot.name} activated! Payouts will accrue automatically.`);
+          qc.invalidateQueries({ queryKey: ["my_active_bots"] });
+          qc.invalidateQueries({ queryKey: ["profile"] });
+          qc.invalidateQueries({ queryKey: ["transactions"] });
+          setOpen(false);
+          return;
+        } else {
+          throw new Error(res.message);
+        }
       }
 
-      // 2. Fallback to RPC
-      let rpcError: any = null;
-      try {
-        const { error } = await supabase.rpc(
-          "activate_bot" as never,
-          {
-            p_bot_id: bot.id,
-            p_invested_amount: usd,
-          } as never,
+      // 2. Fallback to client insert with strict schema matching if serverFn is unreachable
+      const balanceCol = mode === "demo" ? "demo_balance" : "live_balance";
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select(`${balanceCol}, crypto_balances`)
+        .eq("id", user!.id)
+        .single();
+
+      let currentBal = 0;
+      if (mode === "demo") {
+        currentBal = Number((prof as any)?.demo_balance ?? 10000);
+      } else if (currencyPool === "USDT") {
+        currentBal = Number((prof as any)?.crypto_balances?.USDT ?? 0);
+      } else {
+        currentBal = Number((prof as any)?.live_balance ?? 0);
+      }
+
+      if (currentBal < usd) {
+        console.error(
+          `[AI Trading Bot Execution Error] Failed transaction attempt due to insufficient liquidity! User: ${user!.id}, Pool: ${currencyPool}, Required: ${usd}, Available: ${currentBal}`,
         );
-        if (error) rpcError = error;
-      } catch (e) {
-        rpcError = e;
+        throw new Error(
+          `Insufficient liquidity in ${currencyPool} pool. Available: $${currentBal.toFixed(2)}`,
+        );
       }
 
-      // 3. Fallback to client insert
-      if (rpcError) {
-        console.warn("[activate_bot RPC failed, performing client fallback]", rpcError);
-        const balanceCol = mode === "demo" ? "demo_balance" : "live_balance";
-        const { data: prof } = await supabase
+      const newBal = currentBal - usd;
+      if (mode === "demo") {
+        await supabase
           .from("profiles")
-          .select(balanceCol)
-          .eq("id", user!.id)
-          .single();
-        const currentBal = Number((prof as any)?.[balanceCol] ?? 0);
-        if (currentBal < usd) throw new Error("Insufficient balance");
-
-        const newBal = currentBal - usd;
-        const { error: balErr } = await supabase
-          .from("profiles")
-          .update({ [balanceCol]: newBal } as never)
+          .update({ demo_balance: newBal } as never)
           .eq("id", user!.id);
-        if (balErr) throw balErr;
-
-        const { error: botErr } = await supabase.from("user_active_bots").insert({
-          user_id: user!.id,
-          bot_id: bot.id,
-          invested_amount: usd,
-          hourly_payout: hourlyPayout,
-          daily_payout: dailyPayout,
-          payout_interval: bot.payout_interval ?? "hourly",
-          account_mode: mode,
-          current_profit: 0,
-          status: "active",
-        } as never);
-        if (botErr) throw botErr;
-
-        await supabase.from("transactions").insert({
-          user_id: user!.id,
-          type: "bot_activation",
-          amount: usd,
-          asset_name: `Activated AI Bot: ${bot.name}`,
-          status: "completed",
-          account_mode: mode,
-        } as never);
+      } else if (currencyPool === "USDT") {
+        const curCrypto = (prof as any)?.crypto_balances ?? {};
+        await supabase
+          .from("profiles")
+          .update({ crypto_balances: { ...curCrypto, USDT: newBal } } as never)
+          .eq("id", user!.id);
+      } else {
+        await supabase
+          .from("profiles")
+          .update({
+            live_balance: newBal,
+            account_balance: newBal,
+            available_cash: newBal,
+          } as never)
+          .eq("id", user!.id);
       }
+
+      const { error: botErr } = await supabase.from("user_active_bots").insert({
+        user_id: user!.id,
+        bot_id: bot.id,
+        invested_amount: usd,
+        activation_date: new Date().toISOString(),
+        expiration_date: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
+        last_payout_at: new Date().toISOString(),
+        current_profit: 0,
+        status: "active",
+      } as never);
+
+      if (botErr) throw botErr;
+
+      await supabase.from("transactions").insert({
+        user_id: user!.id,
+        type: "bot_activation",
+        amount: usd,
+        asset_name: `Activated AI Bot: ${bot.name} (${currencyPool})`,
+        status: "completed",
+        account_mode: mode,
+      } as never);
 
       toast.success(`${bot.name} activated! Payouts will accrue automatically.`);
       qc.invalidateQueries({ queryKey: ["my_active_bots"] });
@@ -390,12 +451,14 @@ function BotCard({
                 <DialogTitle>Activate {bot.name}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                <div className="rounded-lg bg-surface p-3 text-sm">
+                <div className="rounded-lg bg-surface p-3 text-sm space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Available balance:</span>
-                    <span className="font-bold tabular-nums">${balance.toFixed(2)}</span>
+                    <span className="text-muted-foreground">Active Pool Balance:</span>
+                    <span className="font-bold tabular-nums">
+                      ${activePoolBalance.toFixed(2)} {mode === "live" ? currencyPool : "DEMO"}
+                    </span>
                   </div>
-                  <div className="flex justify-between mt-1">
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">Payout:</span>
                     <span className="font-bold text-success">
                       {isHourly
@@ -403,17 +466,62 @@ function BotCard({
                         : `$${dailyPayout.toFixed(2)}/day`}
                     </span>
                   </div>
-                  <div className="flex justify-between mt-1">
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">Duration:</span>
                     <span className="font-bold">{bot.duration_days} days</span>
                   </div>
-                  <div className="flex justify-between mt-1">
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">Total return:</span>
                     <span className="font-bold text-success">${totalReturn.toFixed(2)}</span>
                   </div>
                 </div>
+                {mode === "live" && (
+                  <div>
+                    <label className="text-sm font-medium">Payment Currency Pool</label>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <Button
+                        type="button"
+                        variant={currencyPool === "USD" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrencyPool("USD")}
+                        className="w-full text-xs"
+                      >
+                        USD Pool (${fiatLiveBalance.toFixed(2)})
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={currencyPool === "USDT" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrencyPool("USDT")}
+                        className="w-full text-xs"
+                      >
+                        USDT Pool (${usdtBalance.toFixed(2)})
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {mode === "live" && activePoolBalance < Number(amount) && (
+                  <div className="rounded-md bg-destructive/10 p-2.5 text-xs text-destructive flex items-start gap-2 font-medium border border-destructive/20">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div>
+                      <span>
+                        Insufficient liquidity in {currencyPool} pool. Available: $
+                        {activePoolBalance.toFixed(2)} {currencyPool}.
+                      </span>
+                      {currencyPool === "USDT" && fiatLiveBalance >= Number(amount) && (
+                        <button
+                          type="button"
+                          className="block mt-1 text-primary underline text-left font-semibold hover:opacity-80"
+                          onClick={() => setCurrencyPool("USD")}
+                        >
+                          Switch to USD Pool (${fiatLiveBalance.toFixed(2)} available)
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div>
-                  <label className="text-sm font-medium">Investment amount (USD)</label>
+                  <label className="text-sm font-medium">Investment amount ({currencyPool})</label>
                   <Input
                     type="number"
                     min={bot.capital_required}
@@ -422,10 +530,15 @@ function BotCard({
                     className="mt-1"
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Minimum: ${bot.capital_required} · Mode: {mode.toUpperCase()}
+                    Minimum: ${bot.capital_required} · Mode: {mode.toUpperCase()} · Pool:{" "}
+                    {currencyPool}
                   </p>
                 </div>
-                <Button onClick={activate} disabled={busy} className="w-full bg-gradient-hero">
+                <Button
+                  onClick={activate}
+                  disabled={busy || (mode === "live" && activePoolBalance < Number(amount))}
+                  className="w-full bg-gradient-hero"
+                >
                   {busy ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (

@@ -14,6 +14,7 @@ import {
   getPlatformSettings,
   savePlatformSetting,
   postAdminNews,
+  reconcileAdminLedger,
   toggleAdminAiTrading,
   toggleAdminAccountMode,
   toggleAdminSuspend,
@@ -93,8 +94,24 @@ function AdminPage() {
     }
     (async () => {
       try {
-        const { data } = await supabase.from("user_roles").select("role").eq("user_id", user.id);
-        if ((data ?? []).some((r) => r.role === "admin")) {
+        const [{ data: roles }, { data: prof }] = await Promise.all([
+          supabase.from("user_roles").select("role").eq("user_id", user.id),
+          supabase
+            .from("profiles")
+            .select("role, is_admin, is_super_admin")
+            .eq("id", user.id)
+            .maybeSingle(),
+        ]);
+        const hasRole = (roles ?? []).some(
+          (r: any) => r.role === "admin" || r.role === "super_admin",
+        );
+        const hasProf = Boolean(
+          prof?.is_admin ||
+          prof?.is_super_admin ||
+          prof?.role === "admin" ||
+          prof?.role === "super_admin",
+        );
+        if (hasRole || hasProf) {
           setIsAdmin(true);
           return;
         }
@@ -989,7 +1006,7 @@ function UserRow({
     }
   };
 
-  const creditDirectCrypto = async () => {
+  const creditDirectCrypto = async (sign: 1 | -1) => {
     const qty = Number(cryptoQty);
     if (!qty || qty <= 0) return toast.error("Enter valid crypto quantity");
     const sym = cryptoSym.toUpperCase();
@@ -1004,7 +1021,12 @@ function UserRow({
         .maybeSingle();
 
       const currentQty = Number(existingBal?.balance ?? 0);
-      const newQty = Number((currentQty + qty).toFixed(6));
+      const signedQty = sign > 0 ? qty : -qty;
+      const newQty = Number((currentQty + signedQty).toFixed(6));
+
+      if (newQty < 0) {
+        return toast.error(`Insufficient ${sym} balance (${currentQty} available)`);
+      }
 
       await supabase.from("user_crypto_balances").upsert(
         {
@@ -1026,7 +1048,7 @@ function UserRow({
       const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
       const updatedJson = {
         ...currentJson,
-        [sym]: Number(((currentJson[sym] ?? 0) + qty).toFixed(6)),
+        [sym]: Number(((currentJson[sym] ?? 0) + signedQty).toFixed(6)),
       };
 
       await supabase
@@ -1037,17 +1059,17 @@ function UserRow({
       // 3. Insert transaction log
       await supabase.from("transactions").insert({
         user_id: user.id,
-        type: "admin_credit",
+        type: sign > 0 ? "admin_credit" : "admin_debit",
         amount: 0,
-        asset_name: `${qty} ${sym}`,
+        asset_name: `${signedQty} ${sym}`,
         status: "completed",
       } as never);
 
-      toast.success(`Credited ${qty} ${sym} to user's wallet`);
+      toast.success(`${sign > 0 ? "Credited" : "Debited"} ${qty} ${sym} from user's wallet`);
       setCryptoQty("");
       await onChange();
     } catch (err: any) {
-      toast.error(err.message ?? "Failed to credit crypto");
+      toast.error(err.message ?? `Failed to ${sign > 0 ? "credit" : "debit"} crypto`);
     }
   };
 
@@ -1253,13 +1275,23 @@ function UserRow({
               onChange={(e) => setCryptoQty(e.target.value)}
               className="text-xs flex-1"
             />
-            <Button
-              size="sm"
-              onClick={creditDirectCrypto}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white"
-            >
-              Credit Asset
-            </Button>
+            <div className="flex gap-1.5">
+              <Button
+                size="sm"
+                onClick={() => creditDirectCrypto(-1)}
+                variant="destructive"
+                className="px-2"
+              >
+                Debit
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => creditDirectCrypto(1)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-2"
+              >
+                Credit
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -3001,11 +3033,40 @@ function AdminRolesTab({
                       onCheckedChange={async (checked) => {
                         try {
                           const fn = checked ? "admin_grant_admin" : "admin_revoke_admin";
-                          const { error } = await supabase.rpc(
-                            fn as never,
-                            { _target: u.id } as never,
-                          );
-                          if (error) throw error;
+                          try {
+                            await supabase.rpc(fn as never, { _target: u.id } as never);
+                          } catch (rpcErr) {
+                            console.warn(
+                              "RPC grant/revoke failed, performing direct table updates:",
+                              rpcErr,
+                            );
+                          }
+
+                          // Update profiles table
+                          await supabase
+                            .from("profiles")
+                            .update({
+                              role: checked ? "admin" : "user",
+                              is_admin: checked,
+                            })
+                            .eq("id", u.id);
+
+                          // Update user_roles table
+                          if (checked) {
+                            await supabase
+                              .from("user_roles")
+                              .upsert(
+                                { user_id: u.id, role: "admin" },
+                                { onConflict: "user_id,role" },
+                              );
+                          } else {
+                            await supabase
+                              .from("user_roles")
+                              .delete()
+                              .eq("user_id", u.id)
+                              .eq("role", "admin");
+                          }
+
                           toast.success(checked ? "Admin access granted" : "Admin access revoked");
                           await reload();
                         } catch (err: any) {

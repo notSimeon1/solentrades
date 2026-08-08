@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAccountMode } from "@/lib/account-mode-context";
 import { useCurrency } from "@/lib/currency-context";
 import { ConvertCryptoModal } from "@/components/ConvertCryptoModal";
+import { SuspendedAccountAlert } from "@/components/SuspendedAccountAlert";
 import { CryptoIcon } from "@/components/CryptoIcon";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -130,8 +131,17 @@ function Dashboard() {
     return list.sort((a, b) => (tickers[b]?.change ?? 0) - (tickers[a]?.change ?? 0));
   }, [filter, tickers, favs]);
 
+  const isSuspended = Boolean(profile?.is_suspended);
+
   return (
     <div className="space-y-5">
+      {/* Account Suspended Alert Banner */}
+      {isSuspended && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+          <SuspendedAccountAlert />
+        </motion.div>
+      )}
+
       {/* LIVE TRADING ACCOUNT card */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <Card className="relative overflow-hidden border-border/70 bg-[color:var(--navy)]/40 p-6 shadow-elegant">
@@ -165,11 +175,15 @@ function Dashboard() {
                     Welcome back, <span className="font-semibold text-foreground">{name}</span>
                   </span>
                 </Link>
-                {mode === "live" && cryptoBalance > 0 && (
-                  <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400 border border-emerald-500/20">
-                    Live Balance: {formatCurrency(balance)} + Crypto Assets:{" "}
-                    {formatCurrency(cryptoBalance)}
-                  </span>
+                {mode === "live" && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-blue-400 border border-blue-500/20">
+                      Cash Balance: {formatCurrency(fiatLiveBalance)}
+                    </span>
+                    <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400 border border-emerald-500/20">
+                      Crypto Holdings: {formatCurrency(cryptoBalance)}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>

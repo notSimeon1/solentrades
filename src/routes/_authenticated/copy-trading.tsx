@@ -161,6 +161,15 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
   const [busy, setBusy] = useState(false);
 
   const activate = async () => {
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("is_suspended")
+      .eq("id", user!.id)
+      .maybeSingle();
+    if (prof?.is_suspended) {
+      toast.error("Account suspended — copy trading is disabled. Contact support.");
+      return;
+    }
     const usd = Number(amount);
     if (!usd || usd < tier.required_capital) {
       toast.error(`Minimum allocation is $${tier.required_capital}`);
