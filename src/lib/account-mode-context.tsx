@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -67,16 +75,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
   const [prices, setPrices] = useState<Record<string, number>>(FALLBACK_PRICES);
 
   const BINANCE_SYMBOLS = useMemo(
-    () => [
-      "BTCUSDT",
-      "ETHUSDT",
-      "BNBUSDT",
-      "SOLUSDT",
-      "XRPUSDT",
-      "ADAUSDT",
-      "MNTUSDT",
-      "DOGEUSDT",
-    ],
+    () => ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "MNTUSDT", "DOGEUSDT"],
     [],
   );
   const { tickers } = useBinancePrices(BINANCE_SYMBOLS);

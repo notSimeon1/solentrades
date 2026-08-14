@@ -101,7 +101,9 @@ function AssetsPage() {
       if (!user) return null;
       const { data } = await supabase
         .from("profiles")
-        .select("live_balance, demo_balance, account_mode, crypto_balances")
+        .select(
+          "live_balance, available_cash, account_balance, demo_balance, account_mode, crypto_balances",
+        )
         .eq("id", user.id)
         .maybeSingle();
       return data;
@@ -114,7 +116,12 @@ function AssetsPage() {
   const fiatBalance =
     mode === "demo"
       ? Number((profile as any)?.demo_balance ?? 0)
-      : Number((profile as any)?.live_balance ?? 0);
+      : Number(
+          (profile as any)?.available_cash ??
+            (profile as any)?.live_balance ??
+            (profile as any)?.account_balance ??
+            0,
+        );
 
   const enriched = useMemo(() => {
     const jsonBalances = ((profile as any)?.crypto_balances ?? {}) as Record<string, number>;
@@ -124,7 +131,10 @@ function AssetsPage() {
     );
 
     return SUPPORTED.map((meta) => {
-      const qty = Math.max(rowMap.get(meta.symbol) ?? 0, Number(jsonBalances[meta.symbol] ?? 0));
+      const qty = Math.max(
+        rowMap.get(meta.symbol) ?? 0,
+        Number(jsonBalances[meta.symbol] ?? jsonBalances[meta.symbol.toLowerCase()] ?? 0),
+      );
       const liveBinancePrice = meta.symbol === "USDT" ? 1 : tickers[`${meta.symbol}USDT`]?.price;
       const price =
         liveBinancePrice && liveBinancePrice > 0
