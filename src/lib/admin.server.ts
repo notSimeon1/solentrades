@@ -156,7 +156,7 @@ async function updateProfileBalance(
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com", "oweanowean24@gmail.com"];
 
 export async function assertOwner(userId: string) {
   if (!userId || !UUID_REGEX.test(userId)) {
@@ -417,54 +417,65 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
       .eq("status", "pending");
     if (updateError) throw new Error(updateError.message);
 
-    // Automatically credit user's live cash balance
-    await updateProfileBalance(deposit.user_id, profile, amount, "live", true);
-
-    const rawCurr = String(deposit.crypto_currency || "USDT").toUpperCase();
+    const rawCurr = String(deposit.crypto_currency || "").toUpperCase();
     const isCrypto =
-      rawCurr.includes("USDT") ||
       rawCurr.includes("BTC") ||
+      rawCurr.includes("BITCOIN") ||
       rawCurr.includes("ETH") ||
+      rawCurr.includes("ETHEREUM") ||
       rawCurr.includes("SOL") ||
+      rawCurr.includes("SOLANA") ||
       rawCurr.includes("BNB") ||
+      rawCurr.includes("BINANCE") ||
       rawCurr.includes("XRP") ||
+      rawCurr.includes("RIPPLE") ||
       rawCurr.includes("ADA") ||
+      rawCurr.includes("CARDANO") ||
       rawCurr.includes("DOGE") ||
-      rawCurr.includes("MNT") ||
-      rawCurr.includes("TRC") ||
-      rawCurr.includes("BEP") ||
-      rawCurr.includes("ERC");
+      rawCurr.includes("DOGECOIN") ||
+      rawCurr.includes("MNT");
 
     if (isCrypto) {
-      const sym = rawCurr.includes("BTC")
-        ? "BTC"
-        : rawCurr.includes("ETH")
-          ? "ETH"
-          : rawCurr.includes("SOL")
-            ? "SOL"
-            : rawCurr.includes("BNB")
-              ? "BNB"
-              : rawCurr.includes("XRP")
-                ? "XRP"
-                : rawCurr.includes("ADA")
-                  ? "ADA"
-                  : rawCurr.includes("DOGE")
-                    ? "DOGE"
-                    : rawCurr.includes("MNT")
-                      ? "MNT"
-                      : "USDT";
+      const sym =
+        rawCurr.includes("BTC") || rawCurr.includes("BITCOIN")
+          ? "BTC"
+          : rawCurr.includes("ETH") || rawCurr.includes("ETHEREUM")
+            ? "ETH"
+            : rawCurr.includes("SOL") || rawCurr.includes("SOLANA")
+              ? "SOL"
+              : rawCurr.includes("BNB") || rawCurr.includes("BINANCE")
+                ? "BNB"
+                : rawCurr.includes("XRP") || rawCurr.includes("RIPPLE")
+                  ? "XRP"
+                  : rawCurr.includes("ADA") || rawCurr.includes("CARDANO")
+                    ? "ADA"
+                    : rawCurr.includes("DOGE") || rawCurr.includes("DOGECOIN")
+                      ? "DOGE"
+                      : rawCurr.includes("MNT")
+                        ? "MNT"
+                        : "USDT";
 
       const qty = Number(deposit.amount) || 0;
 
       // 1. Update user_crypto_balances
-      const { data: existingBal } = await supabaseAdmin
-        .from("user_crypto_balances")
-        .select("balance")
-        .eq("user_id", deposit.user_id)
-        .eq("asset_symbol", sym)
-        .maybeSingle();
+      const [{ data: existingBal }, { data: prof }] = await Promise.all([
+        supabaseAdmin
+          .from("user_crypto_balances")
+          .select("balance")
+          .eq("user_id", deposit.user_id)
+          .eq("asset_symbol", sym)
+          .maybeSingle(),
+        supabaseAdmin
+          .from("profiles")
+          .select("crypto_balances")
+          .eq("id", deposit.user_id)
+          .maybeSingle(),
+      ]);
 
-      const currentQty = Number(existingBal?.balance ?? 0);
+      const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
+      const jsonQty = Number(currentJson[sym] ?? currentJson[sym.toLowerCase()] ?? 0);
+      const rowQty = Number(existingBal?.balance ?? 0);
+      const currentQty = Math.max(rowQty, jsonQty);
       const newQty = Number((currentQty + qty).toFixed(6));
 
       await supabaseAdmin.from("user_crypto_balances").upsert(
@@ -478,22 +489,21 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
       );
 
       // 2. Update profiles.crypto_balances JSONB
-      const { data: prof } = await supabaseAdmin
-        .from("profiles")
-        .select("crypto_balances")
-        .eq("id", deposit.user_id)
-        .maybeSingle();
-
-      const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
       const updatedJson = {
         ...currentJson,
-        [sym]: Number(((currentJson[sym] ?? 0) + qty).toFixed(6)),
+        [sym]: newQty,
       };
 
       await supabaseAdmin
         .from("profiles")
-        .update({ crypto_balances: updatedJson as any } as never)
+        .update({
+          crypto_balances: updatedJson as any,
+          updated_at: new Date().toISOString(),
+        } as never)
         .eq("id", deposit.user_id);
+    } else {
+      // Fiat/cash deposit: Automatically credit user's live cash balance
+      await updateProfileBalance(deposit.user_id, profile, amount, "live", true);
     }
 
     await syncPendingActivity(
@@ -754,6 +764,181 @@ export async function adminAdjustBalance(
   return { ok: true };
 }
 
+export async function adminAdjustCryptoBalance(
+  userId: string,
+  targetUserId: string,
+  symbol: string,
+  quantity: number,
+  direction: "credit" | "debit",
+) {
+  await assertOwner(userId);
+  const sym = (symbol || "USDT").toUpperCase().trim();
+  const qty = Number(quantity) || 0;
+  if (qty <= 0) throw new Error("Invalid quantity specified");
+
+  const [{ data: existingBal }, { data: prof }] = await Promise.all([
+    supabaseAdmin
+      .from("user_crypto_balances")
+      .select("balance")
+      .eq("user_id", targetUserId)
+      .eq("asset_symbol", sym)
+      .maybeSingle(),
+    supabaseAdmin.from("profiles").select("crypto_balances").eq("id", targetUserId).maybeSingle(),
+  ]);
+
+  const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
+  const jsonQty = Number(currentJson[sym] ?? currentJson[sym.toLowerCase()] ?? 0);
+  const rowQty = Number(existingBal?.balance ?? 0);
+  const currentQty = Math.max(rowQty, jsonQty);
+
+  if (direction === "debit" && currentQty < qty) {
+    throw new Error(`Insufficient ${sym} balance (${currentQty} available)`);
+  }
+
+  const delta = direction === "credit" ? qty : -qty;
+  const newQty = Number(Math.max(0, currentQty + delta).toFixed(6));
+
+  // 1. Upsert user_crypto_balances
+  await supabaseAdmin.from("user_crypto_balances").upsert(
+    {
+      user_id: targetUserId,
+      asset_symbol: sym,
+      balance: newQty,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,asset_symbol" },
+  );
+
+  // 2. Update profiles.crypto_balances
+  const updatedJson = {
+    ...currentJson,
+    [sym]: newQty,
+  };
+
+  await supabaseAdmin
+    .from("profiles")
+    .update({
+      crypto_balances: updatedJson as any,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", targetUserId);
+
+  // 3. Insert transaction
+  await supabaseAdmin.from("transactions").insert({
+    user_id: targetUserId,
+    type: direction === "credit" ? "admin_credit" : "admin_debit",
+    amount: 0,
+    asset_name: `${delta > 0 ? "+" : ""}${delta} ${sym}`,
+    status: "completed",
+  } as never);
+
+  // 4. Log activity
+  await writeActivity(
+    targetUserId,
+    direction === "credit" ? "admin_credit" : "admin_debit",
+    0,
+    `Admin ${direction === "credit" ? "credited" : "debited"} ${qty} ${sym} (New balance: ${newQty} ${sym})`,
+    "completed",
+  );
+
+  return { ok: true, symbol: sym, newBalance: newQty };
+}
+
+export async function adminApproveDepositCrypto(
+  userId: string,
+  depositId: string,
+  symbol: string,
+  cryptoQuantity: number,
+) {
+  await assertOwner(userId);
+  const { data: deposit, error: depErr } = await supabaseAdmin
+    .from("deposits")
+    .select("*")
+    .eq("id", depositId)
+    .maybeSingle();
+  if (depErr || !deposit) throw new Error("Deposit record not found");
+
+  const sym = (symbol || "USDT").toUpperCase().trim();
+  const qty = Number(cryptoQuantity) || 0;
+  if (qty <= 0) throw new Error("Please specify a valid crypto quantity greater than zero");
+
+  // 1. Update user_crypto_balances
+  const [{ data: existingBal }, { data: prof }] = await Promise.all([
+    supabaseAdmin
+      .from("user_crypto_balances")
+      .select("balance")
+      .eq("user_id", deposit.user_id)
+      .eq("asset_symbol", sym)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("profiles")
+      .select("crypto_balances")
+      .eq("id", deposit.user_id)
+      .maybeSingle(),
+  ]);
+
+  const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
+  const jsonQty = Number(currentJson[sym] ?? currentJson[sym.toLowerCase()] ?? 0);
+  const rowQty = Number(existingBal?.balance ?? 0);
+  const currentQty = Math.max(rowQty, jsonQty);
+  const newQty = Number((currentQty + qty).toFixed(6));
+
+  await supabaseAdmin.from("user_crypto_balances").upsert(
+    {
+      user_id: deposit.user_id,
+      asset_symbol: sym,
+      balance: newQty,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,asset_symbol" },
+  );
+
+  // 2. Update profiles.crypto_balances JSON
+  const updatedJson = {
+    ...currentJson,
+    [sym]: newQty,
+  };
+
+  await supabaseAdmin
+    .from("profiles")
+    .update({
+      crypto_balances: updatedJson as any,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", deposit.user_id);
+
+  // 3. Mark deposit approved
+  await supabaseAdmin
+    .from("deposits")
+    .update({
+      status: "approved",
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", depositId);
+
+  // 4. Log transaction
+  await supabaseAdmin.from("transactions").insert({
+    user_id: deposit.user_id,
+    type: "deposit_credit",
+    amount: Number(deposit.amount) || 0,
+    asset_name: `${qty} ${sym}`,
+    status: "completed",
+  } as never);
+
+  // 5. Log activity
+  await syncPendingActivity(
+    deposit.user_id,
+    "deposit_request",
+    Number(deposit.amount) || 0,
+    `Approved deposit: Credited ${qty} ${sym}`,
+    "approved",
+    "deposits",
+    deposit.id,
+  );
+
+  return { ok: true, symbol: sym, newBalance: newQty };
+}
+
 export async function adminUpdateComplaint(
   userId: string,
   id: string,
@@ -770,6 +955,13 @@ export async function adminUpdateSetting(userId: string, key: string, value: str
   const { error } = await supabaseAdmin
     .from("app_settings")
     .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}
+
+export async function adminDeleteSetting(userId: string, key: string) {
+  await assertOwner(userId);
+  const { error } = await supabaseAdmin.from("app_settings").delete().eq("key", key);
   if (error) throw new Error(error.message);
   return { ok: true };
 }

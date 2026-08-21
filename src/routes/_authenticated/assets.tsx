@@ -23,6 +23,11 @@ import {
   Sparkles,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import {
+  computeEnrichedCryptoAssets,
+  CRYPTO_PRICE_SYMBOLS,
+  SUPPORTED_CRYPTO_ASSETS,
+} from "@/lib/crypto-assets";
 
 export const Route = createFileRoute("/_authenticated/assets")({
   component: AssetsPage,
@@ -41,30 +46,6 @@ export const Route = createFileRoute("/_authenticated/assets")({
   }),
 });
 
-const SUPPORTED = [
-  { symbol: "BTC", name: "Bitcoin", icon: "₿", decimals: 6 },
-  { symbol: "ETH", name: "Ethereum", icon: "Ξ", decimals: 5 },
-  { symbol: "BNB", name: "BNB", icon: "B", decimals: 4 },
-  { symbol: "SOL", name: "Solana", icon: "◎", decimals: 4 },
-  { symbol: "XRP", name: "XRP", icon: "✕", decimals: 2 },
-  { symbol: "ADA", name: "Cardano", icon: "₳", decimals: 2 },
-  { symbol: "DOGE", name: "Dogecoin", icon: "Ð", decimals: 2 },
-  { symbol: "USDT", name: "Tether", icon: "₮", decimals: 2 },
-];
-
-const PRICE_SYMBOLS = SUPPORTED.filter((s) => s.symbol !== "USDT").map((s) => `${s.symbol}USDT`);
-
-const FALLBACK_PRICES: Record<string, number> = {
-  BTC: 96500,
-  ETH: 3450,
-  BNB: 650,
-  SOL: 195,
-  XRP: 2.45,
-  ADA: 0.85,
-  DOGE: 0.28,
-  USDT: 1.0,
-};
-
 function fmt(n: number, decimals: number) {
   return n.toLocaleString(undefined, {
     minimumFractionDigits: Math.min(2, decimals),
@@ -75,7 +56,7 @@ function fmt(n: number, decimals: number) {
 function AssetsPage() {
   const { user } = useAuth();
   const { formatCurrency, formatPrice, currencyInfo } = useCurrency();
-  const { tickers } = useBinancePrices(PRICE_SYMBOLS);
+  const { tickers } = useBinancePrices(CRYPTO_PRICE_SYMBOLS);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"value" | "name">("value");
   const [convertModalOpen, setConvertModalOpen] = useState(false);
@@ -92,7 +73,7 @@ function AssetsPage() {
       return data ?? [];
     },
     enabled: !!user,
-    refetchInterval: 8000,
+    refetchInterval: 5000,
   });
 
   const { data: profile } = useQuery({
@@ -109,7 +90,7 @@ function AssetsPage() {
       return data;
     },
     enabled: !!user,
-    refetchInterval: 8000,
+    refetchInterval: 5000,
   });
 
   const mode = (profile as any)?.account_mode as "demo" | "live" | undefined;
@@ -123,28 +104,10 @@ function AssetsPage() {
             0,
         );
 
-  const enriched = useMemo(() => {
-    const jsonBalances = ((profile as any)?.crypto_balances ?? {}) as Record<string, number>;
-    const rowMap = new Map<string, number>();
-    (wallets ?? []).forEach((w: any) =>
-      rowMap.set(String(w.asset_symbol).toUpperCase(), Number(w.balance ?? 0)),
-    );
-
-    return SUPPORTED.map((meta) => {
-      const qty = Math.max(
-        rowMap.get(meta.symbol) ?? 0,
-        Number(jsonBalances[meta.symbol] ?? jsonBalances[meta.symbol.toLowerCase()] ?? 0),
-      );
-      const liveBinancePrice = meta.symbol === "USDT" ? 1 : tickers[`${meta.symbol}USDT`]?.price;
-      const price =
-        liveBinancePrice && liveBinancePrice > 0
-          ? liveBinancePrice
-          : (FALLBACK_PRICES[meta.symbol] ?? 100);
-      return { ...meta, qty, price, usdValue: qty * price };
-    });
+  const { assets: enriched, totalCryptoUsd: totalCryptoValue } = useMemo(() => {
+    return computeEnrichedCryptoAssets(wallets, (profile as any)?.crypto_balances, tickers);
   }, [wallets, profile, tickers]);
 
-  const totalCryptoValue = enriched.reduce((s, h) => s + h.usdValue, 0);
   const totalValue = fiatBalance + totalCryptoValue;
 
   const visible = useMemo(() => {

@@ -41,11 +41,11 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 const SYMBOLS = [
+  "XRPUSDT",
   "BTCUSDT",
   "ETHUSDT",
   "BNBUSDT",
   "SOLUSDT",
-  "XRPUSDT",
   "ADAUSDT",
   "MNTUSDT",
   "DOGEUSDT",
@@ -54,11 +54,11 @@ const SYMBOL_META: Record<
   string,
   { icon: string; name: string; leverage: string; hot?: boolean; gainer?: boolean }
 > = {
+  XRPUSDT: { icon: "✕", name: "XRP", leverage: "10x", hot: true, gainer: true },
   BTCUSDT: { icon: "₿", name: "Bitcoin", leverage: "10x", hot: true, gainer: true },
   ETHUSDT: { icon: "Ξ", name: "Ethereum", leverage: "10x", hot: true, gainer: true },
   BNBUSDT: { icon: "B", name: "BNB", leverage: "10x", hot: true },
   SOLUSDT: { icon: "◎", name: "Solana", leverage: "5x", hot: true, gainer: true },
-  XRPUSDT: { icon: "✕", name: "XRP", leverage: "5x" },
   ADAUSDT: { icon: "₳", name: "Cardano", leverage: "5x" },
   MNTUSDT: { icon: "M", name: "Mantle", leverage: "5x" },
   DOGEUSDT: { icon: "Ð", name: "Dogecoin", leverage: "5x", hot: true },
@@ -180,9 +180,13 @@ function Dashboard() {
                     <span className="rounded-full bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-blue-400 border border-blue-500/20">
                       Cash Balance: {formatCurrency(fiatLiveBalance)}
                     </span>
-                    <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400 border border-emerald-500/20">
+                    <Link
+                      to="/assets"
+                      className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                      title="View crypto assets ledger"
+                    >
                       Crypto Holdings: {formatCurrency(cryptoBalance)}
-                    </span>
+                    </Link>
                   </div>
                 )}
               </div>
@@ -248,6 +252,60 @@ function Dashboard() {
             </Link>
           </div>
         </Card>
+      </motion.div>
+
+      {/* XRP IS THE NEW BITCOIN - SPOTLIGHT BANNER */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <div className="relative overflow-hidden rounded-2xl border border-sky-500/30 bg-gradient-to-r from-sky-950/40 via-card to-background p-5 shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 border border-sky-500/30">
+                <CryptoIcon symbol="XRP" size="md" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-extrabold text-base tracking-tight text-foreground">
+                    “XRP is the new bitcoin”
+                  </span>
+                  <Badge className="bg-sky-500/20 text-sky-400 border-sky-500/40 text-[10px] uppercase font-bold">
+                    Institutional Supercycle
+                  </Badge>
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px]">
+                    $50+ Target
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground max-w-2xl">
+                  Global interbank liquidity is flowing into the XRP Ledger. Instant 3-sec
+                  settlement with institutional deep liquidity is now live on Solen Trades.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                asChild
+                size="sm"
+                className="bg-sky-500 hover:bg-sky-600 text-white font-bold shadow-md shadow-sky-500/20"
+              >
+                <Link to="/buy-xrp">
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Buy XRP
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
+              >
+                <Link to="/trade">Trade XRP</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
       </motion.div>
 
       {/* Live Crypto Market */}
@@ -326,7 +384,8 @@ function TickerRow({
     setFlash(t.direction === "up" ? "up" : t.direction === "down" ? "down" : null);
     const id = setTimeout(() => setFlash(null), 400);
     return () => clearTimeout(id);
-  }, [t?.price]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t?.price, t?.direction]);
 
   const price = t?.price ?? 0;
   const change = t?.change ?? 0;

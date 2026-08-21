@@ -143,7 +143,7 @@ export function LiveChatWidget() {
       isMounted = false;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     if (open) setUnread(0);

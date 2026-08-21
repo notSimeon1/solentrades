@@ -73,24 +73,27 @@ export function WhatsAppChat({
   const recordingTimer = useRef<any>(null);
 
   // Mark unread messages from opposite party as read
-  const markAsRead = async (msgs: SupportMsg[]) => {
-    const unreadIds = msgs
-      .filter(
-        (m) =>
-          (currentUserRole === "user" ? m.sender !== "user" : m.sender === "user") && !m.is_read,
-      )
-      .map((m) => m.id);
+  const markAsRead = useCallback(
+    async (msgs: SupportMsg[]) => {
+      const unreadIds = msgs
+        .filter(
+          (m) =>
+            (currentUserRole === "user" ? m.sender !== "user" : m.sender === "user") && !m.is_read,
+        )
+        .map((m) => m.id);
 
-    if (unreadIds.length > 0) {
-      await supabase
-        .from("support_messages")
-        .update({ is_read: true } as never)
-        .in("id", unreadIds);
-    }
-  };
+      if (unreadIds.length > 0) {
+        await supabase
+          .from("support_messages")
+          .update({ is_read: true } as never)
+          .in("id", unreadIds);
+      }
+    },
+    [currentUserRole],
+  );
 
   // Fetch messages and subscribe to realtime + poller
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async () => {
     if (!threadId) return;
     const { data } = await supabase
       .from("support_messages")
@@ -103,7 +106,7 @@ export function WhatsAppChat({
       setMessages(msgs);
       markAsRead(msgs);
     }
-  };
+  }, [threadId, markAsRead]);
 
   useEffect(() => {
     loadMessages();
@@ -152,7 +155,7 @@ export function WhatsAppChat({
       supabase.removeChannel(channel);
       clearInterval(poller);
     };
-  }, [threadId, currentUserRole]);
+  }, [threadId, currentUserRole, loadMessages]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });

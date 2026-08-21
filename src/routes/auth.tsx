@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/Navbar";
 import { toast } from "sonner";
 import { PasswordResetModal } from "@/components/PasswordResetModal";
+import { CryptoIcon } from "@/components/CryptoIcon";
 import {
   Loader as Loader2,
   TrendingUp,
@@ -29,6 +30,11 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   KeyRound,
+  Sparkles,
+  Flame,
+  CheckCircle2,
+  LogIn,
+  UserPlus,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -39,6 +45,14 @@ export const Route = createFileRoute("/auth")({
       typeof s.next === "string" && s.next.startsWith("/") && !s.next.startsWith("//")
         ? s.next
         : "",
+    tab:
+      typeof s.tab === "string" && (s.tab === "signup" || s.tab === "signin")
+        ? (s.tab as "signup" | "signin")
+        : undefined,
+    mode:
+      typeof s.mode === "string" && (s.mode === "signup" || s.mode === "signin")
+        ? (s.mode as "signup" | "signin")
+        : undefined,
   }),
   head: () => ({
     meta: [
@@ -67,8 +81,10 @@ const schema = z.object({
 function AuthPage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
-  const { next } = Route.useSearch();
-  const [tab, setTab] = useState<"signin" | "signup">("signin");
+  const search = Route.useSearch();
+  const [tab, setTab] = useState<"signin" | "signup">(
+    (search.tab || search.mode) === "signup" ? "signup" : "signin",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -78,7 +94,61 @@ function AuthPage() {
   const [lastAttempt, setLastAttempt] = useState(0);
   const [resetModalOpen, setResetModalOpen] = useState(false);
 
-  const returnTo = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+  const authCardRef = useRef<HTMLDivElement>(null);
+
+  const returnTo =
+    search.next && search.next.startsWith("/") && !search.next.startsWith("//")
+      ? search.next
+      : "/dashboard";
+
+  // Smooth scroll handler to scroll upwards or downwards right to the auth column
+  const scrollToAuth = (targetTab?: "signin" | "signup") => {
+    if (targetTab) {
+      setTab(targetTab);
+    }
+    setTimeout(() => {
+      if (authCardRef.current) {
+        const navOffset = 80;
+        const elementPosition = authCardRef.current.getBoundingClientRect().top;
+        const offsetPosition = elementPosition + window.pageYOffset - navOffset;
+
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: "smooth",
+        });
+
+        // Pulsing highlight effect on the auth card
+        authCardRef.current.classList.add("ring-2", "ring-primary", "shadow-glow");
+        setTimeout(() => {
+          authCardRef.current?.classList.remove("ring-2", "ring-primary", "shadow-glow");
+        }, 1200);
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }, 20);
+  };
+
+  // Listen to custom event dispatched by Navbar buttons or elsewhere
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ tab?: "signin" | "signup" }>;
+      if (customEvent.detail?.tab) {
+        scrollToAuth(customEvent.detail.tab);
+      } else {
+        scrollToAuth();
+      }
+    };
+    window.addEventListener("auth-scroll-to", handler);
+    return () => window.removeEventListener("auth-scroll-to", handler);
+  }, []);
+
+  // Update tab if query search param changes
+  useEffect(() => {
+    const target = search.tab || search.mode;
+    if (target === "signup" || target === "signin") {
+      setTab(target);
+    }
+  }, [search.tab, search.mode]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -195,10 +265,34 @@ function AuthPage() {
                 <span className="text-muted-foreground">countries</span>
               </div>
             </div>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Button
+                size="lg"
+                className="bg-gradient-hero font-bold shadow-glow"
+                onClick={() => scrollToAuth("signup")}
+              >
+                <UserPlus className="mr-2 h-4 w-4" />
+                Create Free Account
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="font-semibold"
+                onClick={() => scrollToAuth("signin")}
+              >
+                <LogIn className="mr-2 h-4 w-4" />
+                Sign In
+              </Button>
+            </div>
           </div>
 
           {/* RIGHT: auth card */}
-          <div className="w-full">
+          <div
+            ref={authCardRef}
+            id="auth-column"
+            className="w-full transition-all duration-300 rounded-2xl"
+          >
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-hero shadow-glow">
                 <TrendingUp className="h-5 w-5 text-primary-foreground" />
@@ -340,6 +434,33 @@ function AuthPage() {
                       256-bit encryption · 2FA enforced · Funds held 1:1
                     </p>
                   </form>
+
+                  {/* Switcher links */}
+                  <div className="pt-2 text-center text-xs text-muted-foreground border-t border-border/50">
+                    {tab === "signup" ? (
+                      <span>
+                        Already have an account?{" "}
+                        <button
+                          type="button"
+                          onClick={() => scrollToAuth("signin")}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          Sign in here
+                        </button>
+                      </span>
+                    ) : (
+                      <span>
+                        Don't have an account?{" "}
+                        <button
+                          type="button"
+                          onClick={() => scrollToAuth("signup")}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          Create account for free
+                        </button>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </Tabs>
             </div>
@@ -359,6 +480,126 @@ function AuthPage() {
         onOpenChange={setResetModalOpen}
         defaultEmail={email}
       />
+
+      {/* XRP INSTITUTIONAL SPOTLIGHT & "XRP IS THE NEW BITCOIN" */}
+      <section className="relative overflow-hidden border-b border-border bg-gradient-to-b from-sky-500/10 via-background to-background py-16 px-6">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-center">
+            <div className="lg:col-span-7 space-y-5">
+              <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 px-3.5 py-1 text-xs font-semibold text-sky-400">
+                <Flame className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
+                <span>Next-Gen Global Liquidity</span>
+              </div>
+              <div className="space-y-3">
+                <blockquote className="text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl text-foreground">
+                  “
+                  <span className="bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-400 bg-clip-text text-transparent">
+                    XRP is the new bitcoin
+                  </span>
+                  ”
+                </blockquote>
+                <p className="text-base text-muted-foreground leading-relaxed max-w-2xl">
+                  While legacy assets take minutes and charge heavy fees, XRP settles in 3–5 seconds
+                  with fractions of a cent in cost. Wall Street liquidity providers and global
+                  banking giants are adopting the XRP Ledger for instant trillions in cross-border
+                  volume — propelling XRP into an institutional supercycle targeting{" "}
+                  <strong>$50+ and beyond</strong>.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-2">
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-3.5">
+                  <div className="text-xs text-muted-foreground font-medium">Settlement Speed</div>
+                  <div className="text-xl font-bold text-sky-400 mt-1">3–5 Sec</div>
+                  <div className="text-[11px] text-muted-foreground">vs 10+ min on BTC</div>
+                </div>
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-3.5">
+                  <div className="text-xs text-muted-foreground font-medium">Throughput</div>
+                  <div className="text-xl font-bold text-emerald-400 mt-1">1,500+ TPS</div>
+                  <div className="text-[11px] text-muted-foreground">Scalable to Visa-grade</div>
+                </div>
+                <div className="col-span-2 sm:col-span-1 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3.5">
+                  <div className="text-xs text-muted-foreground font-medium">
+                    Analyst Moon Target
+                  </div>
+                  <div className="text-xl font-bold text-amber-400 mt-1">$50.00+</div>
+                  <div className="text-[11px] text-muted-foreground">Institutional Target</div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <Button
+                  size="lg"
+                  className="bg-sky-500 hover:bg-sky-600 text-white font-bold shadow-lg shadow-sky-500/25"
+                  onClick={() => scrollToAuth("signup")}
+                >
+                  <Sparkles className="mr-2 h-4 w-4" /> Start Trading XRP Now
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
+                  onClick={() => scrollToAuth("signin")}
+                >
+                  <LogIn className="mr-2 h-4 w-4" /> Sign In to Trade
+                </Button>
+                <Link
+                  to="/trade"
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg border border-border text-sm font-semibold hover:bg-muted transition-colors"
+                >
+                  <CryptoIcon symbol="XRP" size="xs" /> View Live XRP Chart
+                </Link>
+              </div>
+            </div>
+
+            <div className="lg:col-span-5">
+              <Card className="border-sky-500/30 bg-gradient-to-br from-card to-sky-950/20 p-6 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                  <CryptoIcon symbol="XRP" size="xl" className="h-44 w-44" />
+                </div>
+                <div className="flex items-center gap-3 pb-4 border-b border-border/70">
+                  <CryptoIcon symbol="XRP" size="md" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-base">XRP / USDT</span>
+                      <Badge className="bg-sky-500/20 text-sky-400 border-sky-500/40 text-[10px]">
+                        HOT TREND
+                      </Badge>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      Ripple Ledger Native Asset
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 py-4 text-xs">
+                  <div className="flex justify-between items-center py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Network Architecture</span>
+                    <span className="font-medium text-foreground">XRPL Consensus Protocol</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Average Gas Fee</span>
+                    <span className="font-medium text-emerald-400">~$0.0002 / tx</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Institutional Custody</span>
+                    <span className="font-medium text-foreground">Multi-Sig Cold Storage</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Moonshot Forecast</span>
+                    <span className="font-bold text-amber-400">$50.00 – $100.00+</span>
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-sky-500/10 border border-sky-500/20 p-3 text-[11px] text-sky-300">
+                  🚀 <strong>Trading Floor Note:</strong> High institutional accumulation detected
+                  on XRPL corridors. Instant deposit and instant cash-out supported on Solen Trades.
+                </div>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* WHY CHOOSE SOLEN TRADES */}
       <section className="border-b border-border bg-surface/30">
@@ -397,13 +638,35 @@ function AuthPage() {
               </motion.div>
             ))}
           </div>
+
+          <div className="mt-10 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-card to-background p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h4 className="text-base font-bold text-foreground">
+                Experience institutional execution in 60 seconds
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                Zero deposit fees · Instant crypto &amp; fiat funding · 24/7 desk support
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <Button
+                className="bg-gradient-hero font-semibold shadow-glow"
+                onClick={() => scrollToAuth("signup")}
+              >
+                <UserPlus className="mr-1.5 h-4 w-4" /> Open Account
+              </Button>
+              <Button variant="outline" onClick={() => scrollToAuth("signin")}>
+                <LogIn className="mr-1.5 h-4 w-4" /> Sign In
+              </Button>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* MARKET INSIGHTS */}
       <section className="border-b border-border">
         <div className="mx-auto max-w-7xl px-6 py-16">
-          <div className="mb-8 flex items-end justify-between gap-4">
+          <div className="mb-8 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
             <div>
               <Badge variant="outline" className="mb-3 border-primary/40 text-primary">
                 Live desk · Delayed 15m
@@ -415,6 +678,18 @@ function AuthPage() {
                 What the Solen Trades trading floor is watching this session — signed in traders see
                 the full stream in real time.
               </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => scrollToAuth("signin")}>
+                <LogIn className="mr-1.5 h-3.5 w-3.5" /> Sign In for Live Desk
+              </Button>
+              <Button
+                size="sm"
+                className="bg-gradient-hero font-semibold"
+                onClick={() => scrollToAuth("signup")}
+              >
+                <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Join Free
+              </Button>
             </div>
           </div>
 
@@ -498,19 +773,45 @@ function AuthPage() {
               </Card>
             ))}
           </div>
+
+          <div className="mt-10 flex flex-wrap justify-center items-center gap-3">
+            <Button
+              size="lg"
+              className="bg-gradient-hero font-bold shadow-glow"
+              onClick={() => scrollToAuth("signup")}
+            >
+              <UserPlus className="mr-2 h-4 w-4" />
+              Join 180,000+ Traders — Sign Up Free
+            </Button>
+            <Button size="lg" variant="outline" onClick={() => scrollToAuth("signin")}>
+              <LogIn className="mr-2 h-4 w-4" />
+              Sign In to Portal
+            </Button>
+          </div>
         </div>
       </section>
 
       {/* FOOTER STRIP */}
       <section className="border-b border-border">
-        <div className="mx-auto max-w-7xl px-6 py-10 text-center">
+        <div className="mx-auto max-w-7xl px-6 py-12 text-center">
           <h3 className="text-2xl font-bold">Ready to trade with an edge?</h3>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground max-w-lg mx-auto">
             Open your Solen Trades account today — no minimum deposit to explore the platform.
           </p>
-          <Button className="mt-5 bg-gradient-hero" onClick={() => setTab("signup")}>
-            Create free account
-          </Button>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Button
+              size="lg"
+              className="bg-gradient-hero font-bold shadow-glow"
+              onClick={() => scrollToAuth("signup")}
+            >
+              <UserPlus className="mr-2 h-4 w-4" />
+              Create free account
+            </Button>
+            <Button size="lg" variant="outline" onClick={() => scrollToAuth("signin")}>
+              <LogIn className="mr-2 h-4 w-4" />
+              Sign in to existing account
+            </Button>
+          </div>
         </div>
       </section>
     </div>
@@ -561,16 +862,22 @@ const WHY_ITEMS = [
   {
     icon: Globe,
     title: "Globally available",
-    body: "Onboard in 140+ countries. Deposit via bank wire, card, USDT (TRC20/BEP20), BTC and ETH.",
+    body: "Onboard in 140+ countries. Deposit via XRP (XRPL), bank wire, card, USDT (TRC20/BEP20), BTC and ETH.",
   },
 ];
 
 const MARKET_ROWS = [
   {
+    pair: "XRP / USDT",
+    price: "Next-gen global interbank liquidity standard on the high-speed XRP Ledger.",
+    change: 14.85,
+    note: "“XRP is the new bitcoin” — targeting $50+ moonshot",
+  },
+  {
     pair: "BTC / USDT",
     price: "Bitcoin operates on a decentralized, permissionless blockchain using PoW.",
     change: 2.14,
-    note: "Broke $118k resistance overnight",
+    note: "Consolidating near institutional liquidity zones",
   },
   {
     pair: "ETH / USDT",
@@ -581,32 +888,26 @@ const MARKET_ROWS = [
   {
     pair: "SOL / USDT",
     price: "Solana uses PoH and PoS to achieve high transaction throughput and low fees.",
-    change: -0.84,
-    note: "Consolidating after 12% rally",
-  },
-  {
-    pair: "SPX 500",
-    price: "The SPX 500 is a market-cap weighted index of 500 large US-listed companies.",
-    change: 0.47,
-    note: "Fed dovish minutes support risk",
+    change: 3.84,
+    note: "High retail & DEX volume expansion",
   },
 ];
 
 const INSIGHTS = [
   {
-    tag: "Crypto",
-    title: "BTC dominance holds 58% as alts absorb rotation",
-    body: "Desk view: expect a 5-8% BTC-led leg before capital fully rotates into large-cap alts. Watch $114k as invalidation.",
+    tag: "XRP Focus",
+    title: "'XRP is the new bitcoin' — Global banking rails accelerate XRPL liquidity",
+    body: "Institutional desks forecast a parabolic expansion above $50 as trillions in cross-border settlements transition to instant XRPL liquidity corridors.",
   },
   {
-    tag: "Macro",
-    title: "US CPI print softer than consensus — risk-on tone",
-    body: "Rate-cut probability for Q1 2027 climbed to 78%. Historically bullish for crypto and long-duration equities over 60 days.",
+    tag: "Crypto",
+    title: "XRP & Altcoin rotation sparks supercycle momentum",
+    body: "Desk analysis: capital velocity is shifting decisively toward real utility assets with instant finality. XRP leading volume across global OTC desks.",
   },
   {
     tag: "Signals",
-    title: "3 high-conviction trades opened on the desk today",
-    body: "Free trial members unlock all entries, TPs and stops. Track record: 74% win rate over the trailing 90 days.",
+    title: "High-conviction XRP long signal issued on Solen Trades desk",
+    body: "Subscribers gained 84% on the last swing. Multi-target alerts for XRP breakout above historical resistance are now active.",
   },
 ];
 

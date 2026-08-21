@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 import { WhatsAppChat } from "@/components/WhatsAppChat";
 import {
   adjustAdminBalance,
+  adjustAdminCryptoBalance,
+  approveAdminDepositCrypto,
   decideAdminDeposit,
   decideAdminKyc,
   decideAdminWithdrawal,
@@ -21,6 +23,7 @@ import {
   updateAdminChart,
   updateAdminComplaint,
   updateAdminSetting,
+  deleteAdminSetting,
 } from "@/lib/admin.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -70,6 +73,15 @@ import {
   Settings2,
   Wallet,
   Search,
+  Copy,
+  Plus,
+  Trash2,
+  QrCode,
+  ExternalLink,
+  Sparkles,
+  CheckCircle2,
+  ArrowUpRight,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -78,7 +90,7 @@ import { TradingChart, type Candle } from "@/components/TradingChart";
 import { generateCandles, nextCandle, type ChartMode } from "@/lib/chart-engine";
 
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com", "oweanowean24@gmail.com"];
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
@@ -219,6 +231,13 @@ function AdminPage() {
           <TabsTrigger value="withdrawals" className="shrink-0">
             Withdrawals
           </TabsTrigger>
+          <TabsTrigger
+            value="wallets"
+            className="shrink-0 bg-primary/10 text-primary hover:bg-primary/20 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium"
+          >
+            <Wallet className="mr-1 h-3.5 w-3.5" />
+            Deposit Wallets
+          </TabsTrigger>
           <TabsTrigger value="users" className="shrink-0">
             Users &amp; Charts
           </TabsTrigger>
@@ -297,6 +316,13 @@ function AdminPage() {
             loading={overviewQuery.isLoading}
             refetch={overviewQuery.refetch}
             tickers={tickers}
+          />
+        </TabsContent>
+        <TabsContent value="wallets">
+          <AdminWalletsTab
+            walletItems={overviewQuery.data?.settings}
+            walletsLoading={overviewQuery.isLoading}
+            refetchWallets={overviewQuery.refetch}
           />
         </TabsContent>
         <TabsContent value="users">
@@ -419,6 +445,7 @@ function DepositProofsTab({
   tickers?: Record<string, Ticker>;
 }) {
   const decideDeposit = useServerFn(decideAdminDeposit);
+  const approveCryptoDeposit = useServerFn(approveAdminDepositCrypto);
   const [creditCrypto, setCreditCrypto] = useState<Record<string, string>>({});
   const [creditQty, setCreditQty] = useState<Record<string, string>>({});
 
@@ -484,57 +511,13 @@ function DepositProofsTab({
     if (!qty || qty <= 0) return toast.error("Enter crypto quantity to credit");
 
     try {
-      // 1. Get existing balance from user_crypto_balances
-      const { data: existingBal } = await supabase
-        .from("user_crypto_balances")
-        .select("balance")
-        .eq("user_id", d.user_id)
-        .eq("asset_symbol", sym)
-        .maybeSingle();
-
-      const currentQty = Number(existingBal?.balance ?? 0);
-      const newQty = Number((currentQty + qty).toFixed(6));
-
-      const { error: upsertErr } = await supabase.from("user_crypto_balances").upsert(
-        {
-          user_id: d.user_id,
-          asset_symbol: sym,
-          balance: newQty,
-          updated_at: new Date().toISOString(),
+      await approveCryptoDeposit({
+        data: {
+          depositId: d.id,
+          symbol: sym,
+          cryptoQuantity: qty,
         },
-        { onConflict: "user_id,asset_symbol" },
-      );
-      if (upsertErr) console.warn("user_crypto_balances error:", upsertErr);
-
-      // 2. Also update profiles.crypto_balances JSONB
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("crypto_balances")
-        .eq("id", d.user_id)
-        .maybeSingle();
-
-      const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
-      const updatedJson = {
-        ...currentJson,
-        [sym]: Number(((currentJson[sym] ?? 0) + qty).toFixed(6)),
-      };
-
-      await supabase
-        .from("profiles")
-        .update({ crypto_balances: updatedJson as any } as never)
-        .eq("id", d.user_id);
-
-      // 3. Record transaction
-      await supabase.from("transactions").insert({
-        user_id: d.user_id,
-        type: "deposit_credit",
-        amount: Number(d.amount) || 0,
-        asset_name: `${qty} ${sym}`,
-        status: "completed",
-      } as never);
-
-      // 4. Mark deposit as approved
-      await decideDeposit({ data: { id: d.id, status: "approved" } });
+      });
 
       toast.success(`Credited ${qty} ${sym} to user wallet successfully`);
       setCreditQty((p) => ({ ...p, [d.id]: "" }));
@@ -1055,6 +1038,7 @@ function UserRow({
 }) {
   const saveUserChart = useServerFn(updateAdminChart);
   const adjustBalance = useServerFn(adjustAdminBalance);
+  const adjustCrypto = useServerFn(adjustAdminCryptoBalance);
   const toggleMode = useServerFn(toggleAdminAccountMode);
   const toggleSuspend = useServerFn(toggleAdminSuspend);
   const toggleAiTrading = useServerFn(toggleAdminAiTrading);
@@ -1128,58 +1112,14 @@ function UserRow({
     const sym = cryptoSym.toUpperCase();
 
     try {
-      // 1. Get existing balance from user_crypto_balances
-      const { data: existingBal } = await supabase
-        .from("user_crypto_balances")
-        .select("balance")
-        .eq("user_id", user.id)
-        .eq("asset_symbol", sym)
-        .maybeSingle();
-
-      const currentQty = Number(existingBal?.balance ?? 0);
-      const signedQty = sign > 0 ? qty : -qty;
-      const newQty = Number((currentQty + signedQty).toFixed(6));
-
-      if (newQty < 0) {
-        return toast.error(`Insufficient ${sym} balance (${currentQty} available)`);
-      }
-
-      await supabase.from("user_crypto_balances").upsert(
-        {
-          user_id: user.id,
-          asset_symbol: sym,
-          balance: newQty,
-          updated_at: new Date().toISOString(),
+      await adjustCrypto({
+        data: {
+          userId: user.id,
+          symbol: sym,
+          quantity: qty,
+          direction: sign > 0 ? "credit" : "debit",
         },
-        { onConflict: "user_id,asset_symbol" },
-      );
-
-      // 2. Also update profiles.crypto_balances JSONB
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("crypto_balances")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
-      const updatedJson = {
-        ...currentJson,
-        [sym]: Number(((currentJson[sym] ?? 0) + signedQty).toFixed(6)),
-      };
-
-      await supabase
-        .from("profiles")
-        .update({ crypto_balances: updatedJson as any } as never)
-        .eq("id", user.id);
-
-      // 3. Insert transaction log
-      await supabase.from("transactions").insert({
-        user_id: user.id,
-        type: sign > 0 ? "admin_credit" : "admin_debit",
-        amount: 0,
-        asset_name: `${signedQty} ${sym}`,
-        status: "completed",
-      } as never);
+      });
 
       toast.success(`${sign > 0 ? "Credited" : "Debited"} ${qty} ${sym} from user's wallet`);
       setCryptoQty("");
@@ -1999,13 +1939,670 @@ const SETTINGS_SECTIONS: SectionDef[] = [
   },
 ];
 
-const WALLET_LABELS: Record<string, string> = {
-  deposit_wallet_usdt: "USDT (ERC-20) deposit address",
-  deposit_wallet_usdt_bep20: "USDT BEP-20 (BSC) deposit address",
-  deposit_wallet_usdt_trc20: "USDT TRC-20 (Tron) deposit address",
-  deposit_wallet_btc: "BTC deposit address",
-  deposit_wallet_eth: "ETH (ERC-20) deposit address",
-};
+// ============ WALLET & DEPOSIT ADDRESS METADATA ============
+interface WalletMeta {
+  key: string;
+  name: string;
+  symbol: string;
+  network: string;
+  category: "crypto" | "memo" | "fee" | "custom";
+  description: string;
+  placeholder: string;
+  badgeColor: string;
+  usage: string;
+}
+
+const KNOWN_WALLET_CONFIGS: WalletMeta[] = [
+  {
+    key: "deposit_wallet_xrp",
+    name: "Ripple (XRP)",
+    symbol: "XRP",
+    network: "XRPL Native Mainnet",
+    category: "crypto",
+    description:
+      "Primary Ripple ledger wallet address used for XRP deposits and instant checkout on /buy-xrp",
+    placeholder: "rEb8TK3gBgk5auZyyb6MfCEBg483PC2Dg6",
+    badgeColor: "bg-sky-500/10 text-sky-400 border-sky-500/30",
+    usage: "/deposit, /buy-xrp",
+  },
+  {
+    key: "deposit_tag_xrp",
+    name: "XRP Destination Tag / Memo",
+    symbol: "XRP TAG",
+    network: "Numeric Memo",
+    category: "memo",
+    description:
+      "Unique numeric destination tag shown to users so XRP deposits are properly identified and credited",
+    placeholder: "10045239",
+    badgeColor: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30",
+    usage: "/deposit, /buy-xrp",
+  },
+  {
+    key: "deposit_wallet_usdt_trc20",
+    name: "Tether USD (TRC-20)",
+    symbol: "USDT",
+    network: "TRON (TRC20)",
+    category: "crypto",
+    description: "Low-fee Tron TRC-20 deposit address for Tether USDT deposits",
+    placeholder: "TYDzsYUEpvnYmQk4zGP9sWWcTEd3YiWULy",
+    badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+    usage: "/deposit",
+  },
+  {
+    key: "deposit_wallet_usdt_bep20",
+    name: "Tether USD (BEP-20)",
+    symbol: "USDT",
+    network: "BNB Smart Chain (BSC)",
+    category: "crypto",
+    description: "Binance Smart Chain BEP-20 deposit address for USDT",
+    placeholder: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
+    badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+    usage: "/deposit",
+  },
+  {
+    key: "deposit_wallet_usdt",
+    name: "Tether USD (ERC-20)",
+    symbol: "USDT",
+    network: "Ethereum Mainnet (ERC20)",
+    category: "crypto",
+    description: "Ethereum Mainnet ERC-20 deposit address for USDT",
+    placeholder: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
+    badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+    usage: "/deposit",
+  },
+  {
+    key: "deposit_wallet_btc",
+    name: "Bitcoin (BTC)",
+    symbol: "BTC",
+    network: "Bitcoin Native Mainnet",
+    category: "crypto",
+    description:
+      "Native Bitcoin mainnet address used for BTC deposits on /deposit and /buy-bitcoin",
+    placeholder: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+    badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+    usage: "/deposit, /buy-bitcoin",
+  },
+  {
+    key: "deposit_wallet_eth",
+    name: "Ethereum (ETH)",
+    symbol: "ETH",
+    network: "Ethereum Mainnet (ERC20)",
+    category: "crypto",
+    description: "Ethereum native deposit address for ETH transfers on /deposit",
+    placeholder: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
+    badgeColor: "bg-indigo-500/10 text-indigo-400 border-indigo-500/30",
+    usage: "/deposit",
+  },
+  {
+    key: "deposit_wallet_sol",
+    name: "Solana (SOL)",
+    symbol: "SOL",
+    network: "Solana Native SPL",
+    category: "crypto",
+    description: "Solana native deposit address for SOL transfers",
+    placeholder: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+    badgeColor: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+    usage: "/deposit",
+  },
+  {
+    key: "deposit_wallet_doge",
+    name: "Dogecoin (DOGE)",
+    symbol: "DOGE",
+    network: "Dogecoin Mainnet",
+    category: "crypto",
+    description: "Dogecoin native deposit address",
+    placeholder: "D8vERFXvPZ29KkK7hKkL7mH5n8mPZ8kH8",
+    badgeColor: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30",
+    usage: "/deposit",
+  },
+  {
+    key: "deposit_wallet_ada",
+    name: "Cardano (ADA)",
+    symbol: "ADA",
+    network: "Cardano Shelley",
+    category: "crypto",
+    description: "Cardano native deposit address",
+    placeholder: "addr1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh...",
+    badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+    usage: "/deposit",
+  },
+  {
+    key: "deposit_wallet_bnb",
+    name: "Binance Coin (BNB)",
+    symbol: "BNB",
+    network: "BNB Smart Chain (BEP20)",
+    category: "crypto",
+    description: "Binance Coin native deposit address",
+    placeholder: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
+    badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+    usage: "/deposit",
+  },
+  {
+    key: "withdrawal_fee_wallet",
+    name: "Withdrawal Fee Collection Wallet",
+    symbol: "FEE",
+    network: "System Escrow",
+    category: "fee",
+    description:
+      "Default fee address displayed to users when tax or withdrawal fee settlement is required",
+    placeholder: "0x71c8b3f465d38a37f59d57a2e584f3ab1d3e8e19",
+    badgeColor: "bg-rose-500/10 text-rose-400 border-rose-500/30",
+    usage: "/withdraw & Tax settlements",
+  },
+];
+
+const PRESET_NEW_WALLETS = [
+  { key: "deposit_wallet_sol", name: "Solana (SOL)", symbol: "SOL", network: "Solana SPL" },
+  { key: "deposit_wallet_doge", name: "Dogecoin (DOGE)", symbol: "DOGE", network: "Dogecoin" },
+  { key: "deposit_wallet_ada", name: "Cardano (ADA)", symbol: "ADA", network: "Cardano" },
+  { key: "deposit_wallet_bnb", name: "BNB (Binance Coin)", symbol: "BNB", network: "BSC (BEP20)" },
+  { key: "deposit_wallet_ltc", name: "Litecoin (LTC)", symbol: "LTC", network: "Litecoin Native" },
+  { key: "deposit_wallet_ton", name: "Toncoin (TON)", symbol: "TON", network: "The Open Network" },
+  { key: "deposit_wallet_avax", name: "Avalanche (AVAX)", symbol: "AVAX", network: "C-Chain" },
+  { key: "deposit_wallet_pol", name: "Polygon (POL/MATIC)", symbol: "POL", network: "Polygon POS" },
+  { key: "deposit_wallet_trx", name: "TRON (TRX)", symbol: "TRX", network: "TRC20" },
+  {
+    key: "custom",
+    name: "Custom / Arbitrary Coin Key",
+    symbol: "CUSTOM",
+    network: "Custom Network",
+  },
+];
+
+export function AdminWalletsTab({
+  walletItems,
+  walletsLoading,
+  refetchWallets,
+}: {
+  walletItems?: any[];
+  walletsLoading: boolean;
+  refetchWallets: () => void | Promise<unknown>;
+}) {
+  const updateWallet = useServerFn(updateAdminSetting);
+  const deleteWallet = useServerFn(deleteAdminSetting);
+
+  const [walletVals, setWalletVals] = useState<Record<string, string>>({});
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCat, setFilterCat] = useState<"all" | "crypto" | "memo" | "fee" | "custom">("all");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Sync incoming database settings into local edit buffer
+  useEffect(() => {
+    if (walletItems) {
+      const m: Record<string, string> = {};
+      walletItems.forEach((r: any) => {
+        m[r.key] = r.value ?? "";
+      });
+      setWalletVals((prev) => {
+        const merged = { ...m };
+        Object.entries(prev).forEach(([k, v]) => {
+          if (v !== m[k]) merged[k] = v;
+        });
+        return merged;
+      });
+    }
+  }, [walletItems]);
+
+  const handleSave = async (key: string) => {
+    setSavingKey(key);
+    try {
+      await updateWallet({ data: { key, value: walletVals[key] ?? "" } });
+      toast.success(`Saved address for ${key}`);
+      await refetchWallets();
+    } catch (err: any) {
+      toast.error(err.message ?? "Save failed");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const handleDelete = async (key: string) => {
+    if (!confirm(`Are you sure you want to remove the wallet setting "${key}"?`)) return;
+    setDeletingKey(key);
+    try {
+      await deleteWallet({ data: { key } });
+      toast.success(`Removed ${key}`);
+      setWalletVals((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      await refetchWallets();
+    } catch (err: any) {
+      toast.error(err.message ?? "Delete failed");
+    } finally {
+      setDeletingKey(null);
+    }
+  };
+
+  const handleCopy = (key: string, text: string) => {
+    if (!text) {
+      toast.info("No address to copy yet");
+      return;
+    }
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    toast.success("Address copied to clipboard");
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  // Combine known configs with any additional custom keys present in database
+  const allKeys = useMemo(() => {
+    const knownKeys = new Set(KNOWN_WALLET_CONFIGS.map((c) => c.key));
+    const list: WalletMeta[] = [...KNOWN_WALLET_CONFIGS];
+
+    // Check if there are keys in walletVals not in known list
+    Object.keys(walletVals).forEach((k) => {
+      if (
+        (k.startsWith("deposit_wallet_") ||
+          k.startsWith("deposit_tag_") ||
+          k.includes("wallet") ||
+          k.includes("deposit")) &&
+        !knownKeys.has(k)
+      ) {
+        list.push({
+          key: k,
+          name:
+            k.replace("deposit_wallet_", "").replace("deposit_tag_", "").toUpperCase() + " Address",
+          symbol: k.split("_").pop()?.toUpperCase() || "CRYPTO",
+          network: "Custom Key",
+          category: "custom",
+          description: `Custom configured key in app_settings table`,
+          placeholder: "0x...",
+          badgeColor: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+          usage: "Active in app_settings",
+        });
+      }
+    });
+
+    return list;
+  }, [walletVals]);
+
+  const filteredList = useMemo(() => {
+    return allKeys.filter((meta) => {
+      if (filterCat !== "all" && meta.category !== filterCat) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        meta.name.toLowerCase().includes(q) ||
+        meta.key.toLowerCase().includes(q) ||
+        meta.symbol.toLowerCase().includes(q) ||
+        meta.network.toLowerCase().includes(q) ||
+        (walletVals[meta.key] ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [allKeys, filterCat, searchQuery, walletVals]);
+
+  return (
+    <div className="space-y-6">
+      {/* Top Banner with live synchronization explanation */}
+      <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-r from-primary/10 via-background to-primary/5 p-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <div className="rounded-lg bg-primary/20 p-2 text-primary">
+                <Wallet className="h-5 w-5" />
+              </div>
+              <h2 className="text-lg font-bold tracking-tight">
+                Deposit Wallet & Payment Management
+              </h2>
+              <Badge
+                variant="outline"
+                className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs gap-1"
+              >
+                <CheckCircle2 className="h-3 w-3" /> Live Synced
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
+              Edit the official cryptocurrency addresses that users pay to. When you edit and save
+              any address below, all user-facing screens (
+              <span className="font-semibold text-foreground">/deposit</span>,{" "}
+              <span className="font-semibold text-foreground">/buy-xrp</span>,{" "}
+              <span className="font-semibold text-foreground">/buy-bitcoin</span>, and fee prompts)
+              immediately update in real time with the new address and QR codes.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => refetchWallets()}
+              disabled={walletsLoading}
+              className="text-xs"
+            >
+              {walletsLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Refresh Data
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search coin, network, key or address..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 text-xs h-9"
+          />
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          {(
+            [
+              { id: "all", label: "All Keys" },
+              { id: "crypto", label: "Crypto Wallets" },
+              { id: "memo", label: "Memos & Tags" },
+              { id: "fee", label: "Fee Escrows" },
+              { id: "custom", label: "Custom Added" },
+            ] as const
+          ).map((t) => (
+            <Button
+              key={t.id}
+              size="sm"
+              variant={filterCat === t.id ? "default" : "outline"}
+              onClick={() => setFilterCat(t.id)}
+              className="text-xs h-8 px-2.5 shrink-0"
+            >
+              {t.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {/* Wallets List Grid */}
+      {walletsLoading ? (
+        <Card className="p-8 flex items-center justify-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">Loading wallet configuration…</span>
+        </Card>
+      ) : filteredList.length === 0 ? (
+        <Card className="p-8 text-center space-y-2">
+          <Wallet className="h-8 w-8 text-muted-foreground mx-auto opacity-50" />
+          <p className="text-sm font-medium">No matching wallet addresses found</p>
+          <p className="text-xs text-muted-foreground">
+            Try clearing your search query or add a new wallet key below.
+          </p>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {filteredList.map((meta) => {
+            const currentVal = walletVals[meta.key] ?? "";
+            const isSaving = savingKey === meta.key;
+            const isDeleting = deletingKey === meta.key;
+            const isCopied = copiedKey === meta.key;
+            const isSet = Boolean(currentVal && currentVal.trim().length > 0);
+
+            return (
+              <Card
+                key={meta.key}
+                className="overflow-hidden border border-border/80 hover:border-primary/40 transition-all flex flex-col justify-between"
+              >
+                <div>
+                  {/* Card Header */}
+                  <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-4 py-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge
+                        variant="outline"
+                        className={`font-mono text-[11px] px-2 py-0.5 border ${meta.badgeColor} shrink-0`}
+                      >
+                        {meta.symbol}
+                      </Badge>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate flex items-center gap-1.5">
+                          {meta.name}
+                        </div>
+                        <span className="text-[11px] text-muted-foreground font-mono truncate block">
+                          {meta.network}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isSet ? (
+                        <Badge
+                          variant="outline"
+                          className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] py-0 px-1.5"
+                        >
+                          Configured
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px] py-0 px-1.5"
+                        >
+                          Empty
+                        </Badge>
+                      )}
+                      {meta.category === "custom" && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleDelete(meta.key)}
+                          disabled={isDeleting}
+                          className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                          title="Delete custom key"
+                        >
+                          {isDeleting ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Body */}
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span className="font-mono text-[11px] text-primary/80 bg-primary/5 px-1.5 py-0.5 rounded border border-primary/10">
+                        key: {meta.key}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        Used on: <span className="font-medium text-foreground">{meta.usage}</span>
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                      {meta.description}
+                    </p>
+
+                    {/* Address Input & Actions */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium text-muted-foreground">
+                          {meta.category === "memo"
+                            ? "Destination Tag / Memo Value"
+                            : "Wallet Address"}
+                        </Label>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {currentVal.length} chars
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          value={currentVal}
+                          onChange={(e) =>
+                            setWalletVals((prev) => ({ ...prev, [meta.key]: e.target.value }))
+                          }
+                          onKeyDown={(e) => e.key === "Enter" && handleSave(meta.key)}
+                          placeholder={meta.placeholder}
+                          className="font-mono text-xs h-9 bg-background/50 focus:bg-background"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleCopy(meta.key, currentVal)}
+                          disabled={!currentVal}
+                          className="h-9 px-2.5 shrink-0"
+                          title="Copy address"
+                        >
+                          {isCopied ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleSave(meta.key)}
+                          disabled={isSaving}
+                          className="h-9 px-3 shrink-0"
+                        >
+                          {isSaving ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <>
+                              <Save className="h-3.5 w-3.5 mr-1" />
+                              Save
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add New Custom / Override Wallet Card */}
+      <CreateWalletCard
+        onSave={async (key, value) => {
+          await updateWallet({ data: { key, value } });
+          await refetchWallets();
+        }}
+      />
+    </div>
+  );
+}
+
+function CreateWalletCard({ onSave }: { onSave: (key: string, value: string) => Promise<void> }) {
+  const [selectedPreset, setSelectedPreset] = useState("deposit_wallet_sol");
+  const [customKey, setCustomKey] = useState("");
+  const [addressVal, setAddressVal] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const activeKey = selectedPreset === "custom" ? customKey.trim() : selectedPreset;
+
+  const handleCreate = async () => {
+    if (!activeKey)
+      return toast.error("Please enter a valid wallet key name (e.g. deposit_wallet_ton)");
+    if (!addressVal.trim()) return toast.error("Please enter the wallet address");
+
+    setSaving(true);
+    try {
+      await onSave(activeKey, addressVal.trim());
+      toast.success(`Successfully activated wallet key "${activeKey}"!`);
+      setAddressVal("");
+      if (selectedPreset === "custom") setCustomKey("");
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to save wallet address");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="overflow-hidden border border-dashed border-primary/40 bg-muted/10 p-5 space-y-4">
+      <div className="flex items-center justify-between border-b border-border pb-3">
+        <div className="flex items-center gap-2">
+          <div className="rounded-md bg-primary/10 p-1.5 text-primary">
+            <Plus className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold">Create New Wallet Address or Override</h3>
+            <p className="text-xs text-muted-foreground">
+              Add support for new blockchains, coins, or secondary escrow addresses.
+            </p>
+          </div>
+        </div>
+        <Badge variant="outline" className="text-xs text-primary bg-primary/5">
+          Dynamic Key Store
+        </Badge>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground">
+            Select Preset or Custom
+          </Label>
+          <Select value={selectedPreset} onValueChange={(v) => setSelectedPreset(v)}>
+            <SelectTrigger className="text-xs h-9">
+              <SelectValue placeholder="Select cryptocurrency..." />
+            </SelectTrigger>
+            <SelectContent>
+              {PRESET_NEW_WALLETS.map((p) => (
+                <SelectItem key={p.key} value={p.key} className="text-xs">
+                  {p.name} ({p.network})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {selectedPreset === "custom" ? (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Custom Key Name</Label>
+            <Input
+              placeholder="e.g. deposit_wallet_shib"
+              value={customKey}
+              onChange={(e) => setCustomKey(e.target.value)}
+              className="text-xs h-9 font-mono"
+            />
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Database Key Name</Label>
+            <Input
+              value={activeKey}
+              readOnly
+              disabled
+              className="text-xs h-9 font-mono bg-muted/50 text-muted-foreground"
+            />
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground">
+            Wallet Address to Receive Funds
+          </Label>
+          <Input
+            placeholder="0x… or native address"
+            value={addressVal}
+            onChange={(e) => setAddressVal(e.target.value)}
+            className="font-mono text-xs h-9"
+          />
+        </div>
+      </div>
+
+      <Button
+        size="sm"
+        onClick={handleCreate}
+        disabled={saving || !activeKey || !addressVal.trim()}
+        className="w-full sm:w-auto"
+      >
+        {saving ? (
+          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Plus className="mr-2 h-3.5 w-3.5" />
+        )}
+        Save &amp; Activate Wallet Address
+      </Button>
+    </Card>
+  );
+}
 
 function SettingField({
   field,
@@ -2065,15 +2662,10 @@ function SettingsTab({
 }) {
   const fetchPlatform = useServerFn(getPlatformSettings);
   const savePlatform = useServerFn(savePlatformSetting);
-  const updateWallet = useServerFn(updateAdminSetting);
 
   // Local editable state for platform settings: key_name → value string
   const [platformVals, setPlatformVals] = useState<Record<string, string>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
-
-  // Local editable state for wallets (app_settings)
-  const [walletVals, setWalletVals] = useState<Record<string, string>>({});
-  const [savingWallet, setSavingWallet] = useState<string | null>(null);
 
   // Load platform settings
   const {
@@ -2103,22 +2695,6 @@ function SettingsTab({
     }
   }, [platformRows]);
 
-  useEffect(() => {
-    if (walletItems) {
-      const m: Record<string, string> = {};
-      walletItems.forEach((r: any) => {
-        m[r.key] = r.value;
-      });
-      setWalletVals((prev) => {
-        const merged = { ...m };
-        Object.entries(prev).forEach(([k, v]) => {
-          if (v !== m[k]) merged[k] = v;
-        });
-        return merged;
-      });
-    }
-  }, [walletItems]);
-
   const savePlatformKey = async (keyName: string, category: string) => {
     setSavingKey(keyName);
     try {
@@ -2134,19 +2710,6 @@ function SettingsTab({
     }
   };
 
-  const saveWalletKey = async (key: string) => {
-    setSavingWallet(key);
-    try {
-      await updateWallet({ data: { key, value: walletVals[key] ?? "" } });
-      toast.success("Wallet address saved");
-      await refetchWallets();
-    } catch (err: any) {
-      toast.error(err.message ?? "Save failed");
-    } finally {
-      setSavingWallet(null);
-    }
-  };
-
   if (loadingPlatform && walletsLoading) {
     return (
       <Card className="p-6 flex items-center gap-3">
@@ -2157,129 +2720,43 @@ function SettingsTab({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Platform settings — one card per section */}
-      {SETTINGS_SECTIONS.map((section) => (
-        <Card key={section.category} className="overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-5 py-3">
-            <span className="text-primary">{section.icon}</span>
-            <h3 className="text-sm font-semibold">{section.label}</h3>
-          </div>
-          <div className="grid gap-4 p-5 sm:grid-cols-2">
-            {section.fields.map((field) => (
-              <SettingField
-                key={field.key}
-                field={field}
-                value={platformVals[field.key] ?? ""}
-                onChange={(v) => setPlatformVals((prev) => ({ ...prev, [field.key]: v }))}
-                onSave={() => savePlatformKey(field.key, section.category)}
-                saving={savingKey === field.key}
-              />
-            ))}
-          </div>
-        </Card>
-      ))}
-
-      {/* Wallet / deposit addresses — from app_settings */}
-      <Card className="overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-5 py-3">
-          <Wallet className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">Deposit Wallet Addresses</h3>
+    <div className="space-y-8">
+      {/* Platform configuration sections */}
+      <div className="space-y-6">
+        <div className="flex items-center gap-2">
+          <Settings2 className="h-4 w-4 text-primary" />
+          <h3 className="text-base font-semibold">General Platform Settings</h3>
         </div>
-        <div className="space-y-4 p-5">
-          {walletsLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        {SETTINGS_SECTIONS.map((section) => (
+          <Card key={section.category} className="overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-5 py-3">
+              <span className="text-primary">{section.icon}</span>
+              <h3 className="text-sm font-semibold">{section.label}</h3>
             </div>
-          ) : (
-            Object.entries(walletVals).map(([k, v]) => (
-              <div key={k} className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">
-                  {WALLET_LABELS[k] ?? k}
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={v}
-                    onChange={(e) => setWalletVals((prev) => ({ ...prev, [k]: e.target.value }))}
-                    onKeyDown={(e) => e.key === "Enter" && saveWalletKey(k)}
-                    className="font-mono text-xs"
-                    placeholder="0x…"
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => saveWalletKey(k)}
-                    disabled={savingWallet === k}
-                    className="shrink-0"
-                  >
-                    {savingWallet === k ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Save className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ))
-          )}
-          {/* Allow adding any new wallet key the admin names */}
-          <AddWalletRow
-            onSave={async (key, value) => {
-              await updateWallet({ data: { key, value } });
-              await refetchWallets();
-            }}
-          />
-        </div>
-      </Card>
-    </div>
-  );
-}
+            <div className="grid gap-4 p-5 sm:grid-cols-2">
+              {section.fields.map((field) => (
+                <SettingField
+                  key={field.key}
+                  field={field}
+                  value={platformVals[field.key] ?? ""}
+                  onChange={(v) => setPlatformVals((prev) => ({ ...prev, [field.key]: v }))}
+                  onSave={() => savePlatformKey(field.key, section.category)}
+                  saving={savingKey === field.key}
+                />
+              ))}
+            </div>
+          </Card>
+        ))}
+      </div>
 
-function AddWalletRow({ onSave }: { onSave: (key: string, value: string) => Promise<void> }) {
-  const [key, setKey] = useState("");
-  const [value, setValue] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const handle = async () => {
-    if (!key.trim() || !value.trim()) return toast.error("Both key and address are required");
-    setSaving(true);
-    try {
-      await onSave(key.trim(), value.trim());
-      toast.success("Wallet added");
-      setKey("");
-      setValue("");
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="mt-2 space-y-2 rounded-xl border border-dashed border-border p-3">
-      <p className="text-xs text-muted-foreground font-medium">Add / override a wallet key</p>
-      <div className="grid grid-cols-2 gap-2">
-        <Input
-          placeholder="key e.g. deposit_wallet_sol"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          className="text-xs"
-        />
-        <Input
-          placeholder="address"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="font-mono text-xs"
+      {/* Embedded Deposit Wallets Management */}
+      <div className="space-y-4 pt-4 border-t border-border">
+        <AdminWalletsTab
+          walletItems={walletItems}
+          walletsLoading={walletsLoading}
+          refetchWallets={refetchWallets}
         />
       </div>
-      <Button size="sm" variant="outline" onClick={handle} disabled={saving} className="w-full">
-        {saving ? (
-          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Save className="mr-2 h-3.5 w-3.5" />
-        )}{" "}
-        Save wallet
-      </Button>
     </div>
   );
 }

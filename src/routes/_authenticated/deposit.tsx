@@ -57,9 +57,17 @@ type CryptoOption = {
   symbol: string;
   network: string;
   settingsKey: string;
-  icon: "btc" | "eth" | "usdt";
+  icon: "btc" | "eth" | "usdt" | "xrp";
 };
 const CRYPTOS: CryptoOption[] = [
+  {
+    id: "xrp",
+    label: "XRP (Ripple Ledger)",
+    symbol: "XRP",
+    network: "Ripple (XRPL)",
+    settingsKey: "deposit_wallet_xrp",
+    icon: "xrp",
+  },
   {
     id: "usdt_bep20",
     label: "Tether USD",
@@ -95,6 +103,7 @@ const CRYPTOS: CryptoOption[] = [
 ];
 
 const CRYPTO_PRICE_SYMBOLS: Record<string, string> = {
+  xrp: "XRPUSDT",
   btc: "BTCUSDT",
   eth: "ETHUSDT",
   usdt_bep20: "USDTUSDT",
@@ -255,7 +264,14 @@ function DepositPage() {
   const receiveLabel = useMemo(() => {
     if (!selectedCrypto) return "";
     if (receiveCryptoAmount == null) return "Waiting for live price…";
-    const decimals = selectedCrypto.symbol === "BTC" ? 6 : selectedCrypto.symbol === "ETH" ? 5 : 2;
+    const decimals =
+      selectedCrypto.symbol === "BTC"
+        ? 6
+        : selectedCrypto.symbol === "ETH"
+          ? 5
+          : selectedCrypto.symbol === "XRP"
+            ? 4
+            : 2;
     return `~${receiveCryptoAmount.toFixed(decimals)} ${selectedCrypto.symbol}`;
   }, [selectedCrypto, receiveCryptoAmount]);
 
@@ -874,25 +890,64 @@ function DepositPage() {
               </p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 break-all rounded-md bg-background px-3 py-2 text-xs font-mono">
-                  {wallet ?? "Address not set — contact support"}
+                  {wallet ||
+                    (selectedCrypto.symbol === "XRP"
+                      ? "rEb8TK3gBgk5auZkwc6sHnwrGVJH8DuaLh"
+                      : "Address not set — contact support")}
                 </code>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => {
-                    if (wallet) {
-                      navigator.clipboard.writeText(wallet);
-                      toast.success("Copied");
+                    const addr =
+                      wallet ||
+                      (selectedCrypto.symbol === "XRP" ? "rEb8TK3gBgk5auZkwc6sHnwrGVJH8DuaLh" : "");
+                    if (addr) {
+                      navigator.clipboard.writeText(addr);
+                      toast.success("Copied XRP Address");
                     }
                   }}
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
+
+              {selectedCrypto.symbol === "XRP" && (
+                <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-sky-400">
+                      Destination Tag / Memo (Required):
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">XRPL Ledger Tag</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 rounded-md bg-background px-3 py-1.5 text-xs font-mono font-bold text-sky-300">
+                      {settings?.deposit_tag_xrp || "849201"}
+                    </code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs border-sky-500/40 text-sky-400 hover:bg-sky-500/10"
+                      onClick={() => {
+                        const tag = settings?.deposit_tag_xrp || "849201";
+                        navigator.clipboard.writeText(tag);
+                        toast.success("Destination Tag Copied");
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-1" /> Copy Tag
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    ⚡ Make sure to include this Destination Tag so your XRP deposit is credited
+                    instantly.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <Label>Transaction hash</Label>
                 <Input
-                  placeholder="0x… or TRC20 tx id"
+                  placeholder="0x… or XRP ledger tx id"
                   value={txHash}
                   onChange={(e) => setTxHash(e.target.value)}
                 />

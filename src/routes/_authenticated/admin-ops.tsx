@@ -40,7 +40,7 @@ import { motion } from "framer-motion";
 import { clearAllAdminBalances } from "@/lib/admin.functions";
 
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com", "oweanowean24@gmail.com"];
 
 export const Route = createFileRoute("/_authenticated/admin-ops")({
   component: AdminOpsPage,

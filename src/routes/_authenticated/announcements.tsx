@@ -25,25 +25,47 @@ export const Route = createFileRoute("/_authenticated/announcements")({
 
 const FALLBACK_NEWS = [
   {
-    id: "fb1",
-    title: "Bitcoin holds above key support as institutional inflows continue",
-    impact: "medium",
-    source: "Solen Trades Desk",
+    id: "fb-xrp-1",
+    title:
+      "⚡ “XRP is the new bitcoin”: Institutional consensus forms as XRPL cross-border velocity outpaces legacy rails",
+    content:
+      "Global banking consortiums and tier-1 asset managers have accelerated XRP liquidity adoption. Wall Street desks are modeling a parabolic supercycle breakout with targets above $50.00 as global settlement infrastructure transitions to the XRP Ledger.",
+    impact: "high",
+    category: "market",
+    source: "Solen Trades Global Desk",
     created_at: new Date().toISOString(),
   },
   {
-    id: "fb2",
-    title: "Ethereum network upgrade scheduled — gas fees expected to drop",
-    impact: "low",
-    source: "Solen Trades Desk",
-    created_at: new Date(Date.now() - 3600000).toISOString(),
+    id: "fb-xrp-2",
+    title:
+      "🚀 XRP Gearing for Massive Moonshot: Analysts Point to $50.00+ Target on Liquidity Shock",
+    content:
+      "On-chain metrics show record OTC outflows from major exchanges as institutional custody vaults lock up billions in XRP reserves. Analysts confirm parabolic momentum indicators matching previous multi-thousand percent cycles.",
+    impact: "high",
+    category: "market",
+    source: "Institutional Intelligence",
+    created_at: new Date(Date.now() - 1800000).toISOString(),
   },
   {
-    id: "fb3",
-    title: "Fed meeting minutes ahead — volatility expected across crypto markets",
+    id: "fb-xrp-3",
+    title: "🔥 Central Banks in G7 Fast-Track XRPL Interoperability — Demand Surges 900%",
+    content:
+      "Cross-border interbank tests using Ripple's ODL protocol demonstrated sub-3-second settlement times at fractions of a cent per transfer. Trillions in sovereign capital projected to trade through XRP corridors.",
     impact: "high",
-    source: "Solen Trades Desk",
+    category: "market",
+    source: "Solen Trades Research",
     created_at: new Date(Date.now() - 7200000).toISOString(),
+  },
+  {
+    id: "fb-xrp-4",
+    title:
+      "💎 XRP Dominance Escalates: Retail & Institutional Traders Accumulate Ahead of $50 Explosion",
+    content:
+      "Solen Trades order book records unprecedented buy volume on XRP pairs. Instant Buy & Instant Deposit with zero conversion slippage is now available across all member accounts.",
+    impact: "high",
+    category: "market",
+    source: "Solen Trades Market Desk",
+    created_at: new Date(Date.now() - 14400000).toISOString(),
   },
 ];
 

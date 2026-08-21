@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAccountMode } from "@/lib/account-mode-context";
 import { useCurrency, AVAILABLE_CURRENCIES } from "@/lib/currency-context";
 import { soundFX } from "@/lib/sound-engine";
+import { CryptoIcon } from "@/components/CryptoIcon";
 import { LiveTickerBar } from "./LiveTickerBar";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,7 +65,7 @@ type NavItem = {
   badge?: { label: string; tone: "gold" | "green" | "purple" | "blue" };
 };
 
-const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com"];
+const ADMIN_EMAILS = ["simonosawaru255@gmail.com", "bayo@gmail.com", "oweanowean24@gmail.com"];
 
 export function Navbar() {
   const { user, signOut } = useAuth();
@@ -170,6 +171,12 @@ export function Navbar() {
           label: "Buy Bitcoin",
           icon: <Bitcoin className="h-4 w-4" />,
           badge: { label: "Instant", tone: "gold" },
+        },
+        {
+          to: "/buy-xrp",
+          label: "Buy XRP",
+          icon: <CryptoIcon symbol="XRP" size="xs" />,
+          badge: { label: "Instant", tone: "blue" },
         },
         { to: "/assets", label: "Assets", icon: <Wallet className="h-4 w-4" /> },
         { to: "/market", label: "Buy / Sell", icon: <ShoppingCart className="h-4 w-4" /> },
@@ -374,6 +381,10 @@ export function Navbar() {
                     <Trophy className="mr-2 h-4 w-4 text-amber-400" />
                     Leaderboard & Ranks
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate({ to: "/buy-xrp" })}>
+                    <CryptoIcon symbol="XRP" size="xs" className="mr-2 h-4 w-4" />
+                    Buy XRP (Instant)
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate({ to: "/swap" })}>
                     <ArrowDownUp className="mr-2 h-4 w-4 text-emerald-400" />
                     Instant Crypto Swap
@@ -413,15 +424,40 @@ export function Navbar() {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Button asChild variant="ghost" size="sm">
-                <Link to="/auth" search={{ next: "" }}>
-                  Sign in
-                </Link>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (
+                    typeof window !== "undefined" &&
+                    window.location.pathname.startsWith("/auth")
+                  ) {
+                    window.dispatchEvent(
+                      new CustomEvent("auth-scroll-to", { detail: { tab: "signin" } }),
+                    );
+                  } else {
+                    navigate({ to: "/auth", search: { next: "", tab: "signin" } });
+                  }
+                }}
+              >
+                Sign in
               </Button>
-              <Button asChild size="sm">
-                <Link to="/auth" search={{ next: "" }}>
-                  Get started
-                </Link>
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (
+                    typeof window !== "undefined" &&
+                    window.location.pathname.startsWith("/auth")
+                  ) {
+                    window.dispatchEvent(
+                      new CustomEvent("auth-scroll-to", { detail: { tab: "signup" } }),
+                    );
+                  } else {
+                    navigate({ to: "/auth", search: { next: "", tab: "signup" } });
+                  }
+                }}
+              >
+                Get started
               </Button>
             </div>
           )}
@@ -488,22 +524,65 @@ export function Navbar() {
                     </ul>
                   </div>
                 ))}
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start"
-                  onClick={async () => {
-                    try {
-                      await signOut();
-                    } catch (e) {
-                      console.error(e);
-                    }
-                    setOpen(false);
-                    navigate({ to: "/" });
-                  }}
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sign out
-                </Button>
+
+                {user ? (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    onClick={async () => {
+                      try {
+                        await signOut();
+                      } catch (e) {
+                        console.error(e);
+                      }
+                      setOpen(false);
+                      navigate({ to: "/" });
+                    }}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign out
+                  </Button>
+                ) : (
+                  <div className="pt-2 space-y-2">
+                    <Button
+                      className="w-full bg-gradient-hero font-semibold"
+                      onClick={() => {
+                        setOpen(false);
+                        if (
+                          typeof window !== "undefined" &&
+                          window.location.pathname.startsWith("/auth")
+                        ) {
+                          window.dispatchEvent(
+                            new CustomEvent("auth-scroll-to", { detail: { tab: "signup" } }),
+                          );
+                        } else {
+                          navigate({ to: "/auth", search: { next: "", tab: "signup" } });
+                        }
+                      }}
+                    >
+                      Create Free Account
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full font-semibold"
+                      onClick={() => {
+                        setOpen(false);
+                        if (
+                          typeof window !== "undefined" &&
+                          window.location.pathname.startsWith("/auth")
+                        ) {
+                          window.dispatchEvent(
+                            new CustomEvent("auth-scroll-to", { detail: { tab: "signin" } }),
+                          );
+                        } else {
+                          navigate({ to: "/auth", search: { next: "", tab: "signin" } });
+                        }
+                      }}
+                    >
+                      Sign In
+                    </Button>
+                  </div>
+                )}
               </nav>
             </motion.aside>
           </>

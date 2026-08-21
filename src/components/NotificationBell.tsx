@@ -59,7 +59,7 @@ export function NotificationBell() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user]);
 
   const unread = items.filter((i) => !i.is_read).length;
 

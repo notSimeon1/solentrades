@@ -38,11 +38,11 @@ export const Route = createFileRoute("/_authenticated/market")({
 });
 
 const SYMBOLS = [
+  "XRPUSDT",
   "BTCUSDT",
   "ETHUSDT",
   "BNBUSDT",
   "SOLUSDT",
-  "XRPUSDT",
   "ADAUSDT",
   "DOGEUSDT",
   "MATICUSDT",

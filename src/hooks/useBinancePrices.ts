@@ -190,6 +190,7 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
       }
       document.removeEventListener("visibilitychange", handleVisibility);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symsKey]); // Use symsKey to avoid exhaustive deps warning and object identity changes
 
   return { tickers, status };

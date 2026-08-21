@@ -121,7 +121,7 @@ function InstantSwapPage() {
     const symUpper = symbol.toUpperCase();
     const jsonBalances = ((profile as { crypto_balances?: Record<string, number> })
       ?.crypto_balances ?? {}) as Record<string, number>;
-    const jsonQty = Number(jsonBalances[symUpper] ?? 0);
+    const jsonQty = Number(jsonBalances[symUpper] ?? jsonBalances[symUpper.toLowerCase()] ?? 0);
 
     const found = (cryptoBalances ?? []).find(
       (b: Record<string, unknown>) =>
@@ -133,10 +133,7 @@ function InstantSwapPage() {
         0,
     );
 
-    if (found) {
-      return Math.max(0, rowQty);
-    }
-    return Math.max(0, jsonQty);
+    return Math.max(0, rowQty, jsonQty);
   };
 
   const availableFromBalance = getBalance(fromSymbol);

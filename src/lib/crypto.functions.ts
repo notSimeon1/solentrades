@@ -1,4 +1,128 @@
 import { createServerFn } from "@tanstack/react-start";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import {
+  computeEnrichedCryptoAssets,
+  CRYPTO_FALLBACK_PRICES,
+  resolveLiveCashBalance,
+  resolveDemoBalance,
+} from "./crypto-assets";
+
+export interface UserPortfolioResult {
+  userId: string;
+  accountMode: "demo" | "live";
+  cashBalance: number;
+  demoBalance: number;
+  cryptoUsdBalance: number;
+  totalLiveBalance: number;
+  cryptoBalances: Record<string, number>;
+  cryptoRows: { asset_symbol: string; balance: number }[];
+  isSuspended: boolean;
+}
+
+export const getUserAccountPortfolio = createServerFn({ method: "POST" })
+  .validator((input: { userId: string }) => input)
+  .handler(async ({ data }): Promise<UserPortfolioResult> => {
+    const { userId } = data;
+    if (!userId) {
+      return {
+        userId: "",
+        accountMode: "demo",
+        cashBalance: 0,
+        demoBalance: 10000,
+        cryptoUsdBalance: 0,
+        totalLiveBalance: 0,
+        cryptoBalances: {},
+        cryptoRows: [],
+        isSuspended: false,
+      };
+    }
+
+    try {
+      const [profRes, cryptoRowsRes] = await Promise.all([
+        supabaseAdmin
+          .from("profiles")
+          .select(
+            "id, live_balance, available_cash, account_balance, demo_balance, account_mode, crypto_balances, is_suspended",
+          )
+          .eq("id", userId)
+          .maybeSingle(),
+        supabaseAdmin
+          .from("user_crypto_balances")
+          .select("asset_symbol, balance")
+          .eq("user_id", userId),
+      ]);
+
+      const profile = profRes.data;
+      const cryptoRows = cryptoRowsRes.data ?? [];
+
+      const cashBalance = resolveLiveCashBalance(profile);
+      const demoBalance = resolveDemoBalance(profile);
+
+      // Extract JSON crypto balances
+      const jsonCrypto = (profile?.crypto_balances ?? {}) as Record<string, number>;
+
+      // Compute enriched crypto asset list
+      const { totalCryptoUsd, assetMap } = computeEnrichedCryptoAssets(cryptoRows, jsonCrypto, {});
+
+      // Determine proper mode: if user has real live funds and mode is demo, default to live
+      let accountMode = ((profile?.account_mode as "demo" | "live") || "live") as "demo" | "live";
+      if (!profile?.account_mode) {
+        accountMode = cashBalance > 0 || totalCryptoUsd > 0 ? "live" : "demo";
+      }
+
+      // Auto-heal profiles table if columns are desynced
+      if (
+        profile &&
+        (profile.live_balance !== cashBalance ||
+          profile.available_cash !== cashBalance ||
+          profile.account_balance !== cashBalance)
+      ) {
+        await supabaseAdmin
+          .from("profiles")
+          .update({
+            live_balance: cashBalance,
+            available_cash: cashBalance,
+            account_balance: cashBalance,
+            updated_at: new Date().toISOString(),
+          } as never)
+          .eq("id", userId);
+      }
+
+      const totalLiveBalance = Number((cashBalance + totalCryptoUsd).toFixed(2));
+
+      const cryptoBalancesMap: Record<string, number> = {};
+      assetMap.forEach((asset, sym) => {
+        if (asset.qty > 0) {
+          cryptoBalancesMap[sym] = asset.qty;
+        }
+      });
+
+      return {
+        userId,
+        accountMode,
+        cashBalance,
+        demoBalance,
+        cryptoUsdBalance: totalCryptoUsd,
+        totalLiveBalance,
+        cryptoBalances: cryptoBalancesMap,
+        cryptoRows,
+        isSuspended: Boolean(profile?.is_suspended),
+      };
+    } catch (err) {
+      console.error("[getUserAccountPortfolio] Error:", err);
+      return {
+        userId,
+        accountMode: "live",
+        cashBalance: 0,
+        demoBalance: 10000,
+        cryptoUsdBalance: 0,
+        totalLiveBalance: 0,
+        cryptoBalances: {},
+        cryptoRows: [],
+        isSuspended: false,
+      };
+    }
+  });
 
 export const proxyCryptoPrices = createServerFn({ method: "GET" })
   .validator((symbols: string[]) => symbols)

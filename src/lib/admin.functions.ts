@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
   adminAdjustBalance,
+  adminAdjustCryptoBalance,
+  adminApproveDepositCrypto,
   adminDecideDeposit,
   adminDecideKyc,
   adminDecideWithdrawal,
@@ -18,6 +20,7 @@ import {
   adminUpdateChart,
   adminUpdateComplaint,
   adminUpdateSetting,
+  adminDeleteSetting,
   closeUserPosition,
   openUserPosition,
 } from "./admin.server";
@@ -42,7 +45,10 @@ const complaintSchema = z.object({
 });
 const settingSchema = z.object({
   key: z.string().min(1).max(80),
-  value: z.string().min(1).max(300),
+  value: z.string().min(0).max(500),
+});
+const deleteSettingSchema = z.object({
+  key: z.string().min(1).max(80),
 });
 const modeSchema = z.object({ userId: z.string().uuid(), mode: z.enum(["demo", "live"]) });
 const suspendSchema = z.object({ userId: z.string().uuid(), suspended: z.boolean() });
@@ -115,6 +121,10 @@ export const updateAdminSetting = createServerFn({ method: "POST" })
     adminUpdateSetting(context?.userId || "admin", data.key, data.value),
   );
 
+export const deleteAdminSetting = createServerFn({ method: "POST" })
+  .inputValidator((input) => deleteSettingSchema.parse(input))
+  .handler(async ({ data, context }) => adminDeleteSetting(context?.userId || "admin", data.key));
+
 export const toggleAdminAccountMode = createServerFn({ method: "POST" })
   .inputValidator((input) => modeSchema.parse(input))
   .handler(async ({ data, context }) =>
@@ -180,6 +190,42 @@ export const savePlatformSetting = createServerFn({ method: "POST" })
   .inputValidator((input) => platformSettingSchema.parse(input))
   .handler(async ({ data, context }) =>
     adminSavePlatformSetting(context?.userId || "admin", data.keyName, data.value, data.category),
+  );
+
+const cryptoBalanceSchema = z.object({
+  userId: z.string().uuid(),
+  symbol: z.string().min(1).max(20),
+  quantity: z.number().positive().max(1_000_000_000),
+  direction: z.enum(["credit", "debit"]),
+});
+
+const approveCryptoDepositSchema = z.object({
+  depositId: z.string().uuid(),
+  symbol: z.string().min(1).max(20),
+  cryptoQuantity: z.number().positive().max(1_000_000_000),
+});
+
+export const adjustAdminCryptoBalance = createServerFn({ method: "POST" })
+  .inputValidator((input) => cryptoBalanceSchema.parse(input))
+  .handler(async ({ data, context }) =>
+    adminAdjustCryptoBalance(
+      context?.userId || "admin",
+      data.userId,
+      data.symbol,
+      data.quantity,
+      data.direction,
+    ),
+  );
+
+export const approveAdminDepositCrypto = createServerFn({ method: "POST" })
+  .inputValidator((input) => approveCryptoDepositSchema.parse(input))
+  .handler(async ({ data, context }) =>
+    adminApproveDepositCrypto(
+      context?.userId || "admin",
+      data.depositId,
+      data.symbol,
+      data.cryptoQuantity,
+    ),
   );
 
 export const reconcileAdminLedger = createServerFn({ method: "POST" })

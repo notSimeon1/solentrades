@@ -12,6 +12,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBinancePrices } from "@/hooks/useBinancePrices";
 import { toast } from "sonner";
+import {
+  computeEnrichedCryptoAssets,
+  CRYPTO_PRICE_SYMBOLS,
+  EnrichedAsset,
+} from "@/lib/crypto-assets";
 
 type AccountMode = "demo" | "live";
 
@@ -23,6 +28,7 @@ type AccountModeContextValue = {
   cashBalance: number;
   cryptoBalance: number;
   demoBalance: number;
+  cryptoAssets: EnrichedAsset[];
   switchMode: (next: AccountMode) => Promise<void>;
   loading: boolean;
   refreshBalances: () => Promise<void>;
@@ -36,32 +42,11 @@ const AccountModeContext = createContext<AccountModeContextValue>({
   cashBalance: 0,
   cryptoBalance: 0,
   demoBalance: 0,
+  cryptoAssets: [],
   switchMode: async () => {},
   loading: true,
   refreshBalances: async () => {},
 });
-
-const FALLBACK_PRICES: Record<string, number> = {
-  BTC: 96500,
-  ETH: 3450,
-  BNB: 650,
-  SOL: 195,
-  XRP: 2.45,
-  ADA: 0.85,
-  DOGE: 0.28,
-  USDT: 1.0,
-};
-
-const COINGECKO_MAP: Record<string, string> = {
-  BTC: "bitcoin",
-  ETH: "ethereum",
-  BNB: "binancecoin",
-  SOL: "solana",
-  XRP: "ripple",
-  ADA: "cardano",
-  DOGE: "dogecoin",
-  USDT: "tether",
-};
 
 export function AccountModeProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -71,94 +56,12 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
   const [cryptoBalance, setCryptoBalance] = useState(0);
   const [liveBalance, setLiveBalance] = useState(0);
   const [demoBalance, setDemoBalance] = useState(10000);
+  const [cryptoAssets, setCryptoAssets] = useState<EnrichedAsset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [prices, setPrices] = useState<Record<string, number>>(FALLBACK_PRICES);
 
-  const BINANCE_SYMBOLS = useMemo(
-    () => ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "MNTUSDT", "DOGEUSDT"],
-    [],
-  );
-  const { tickers } = useBinancePrices(BINANCE_SYMBOLS);
+  const { tickers } = useBinancePrices(CRYPTO_PRICE_SYMBOLS);
 
-  const activePrices = useMemo(() => {
-    const map: Record<string, number> = { ...FALLBACK_PRICES, ...prices };
-    Object.entries(tickers ?? {}).forEach(([s, t]) => {
-      const base = s.replace(/USDT$/, "");
-      if (t?.price && t.price > 0) {
-        map[base] = t.price;
-      }
-    });
-    map["USDT"] = 1.0;
-    map["USDC"] = 1.0;
-    return map;
-  }, [tickers, prices]);
-
-  // 1. Fetch live prices for valuation fallback
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchPrices() {
-      if (document.hidden) return;
-      try {
-        const symbols = [
-          "BTCUSDT",
-          "ETHUSDT",
-          "BNBUSDT",
-          "SOLUSDT",
-          "XRPUSDT",
-          "ADAUSDT",
-          "DOGEUSDT",
-        ];
-        const binanceUrl = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(
-          JSON.stringify(symbols),
-        )}`;
-
-        const res = await fetch(binanceUrl);
-        if (res.ok) {
-          const data = await res.json();
-          if (cancelled) return;
-          const next: Record<string, number> = { ...FALLBACK_PRICES };
-          if (Array.isArray(data)) {
-            data.forEach((d: any) => {
-              if (d && d.symbol) {
-                const base = d.symbol.replace(/USDT$/, "");
-                next[base] = Number(d.lastPrice);
-              }
-            });
-            next["USDT"] = 1.0;
-            setPrices(next);
-            return;
-          }
-        }
-
-        // Coinbase Fallback
-        const cbRes = await fetch("https://api.coinbase.com/v2/exchange-rates?currency=USD");
-        if (cbRes.ok) {
-          const cbData = await cbRes.json();
-          const rates = cbData?.data?.rates || {};
-          if (cancelled) return;
-          const next: Record<string, number> = { ...FALLBACK_PRICES };
-          Object.keys(FALLBACK_PRICES).forEach((sym) => {
-            if (rates[sym] && Number(rates[sym]) > 0) {
-              next[sym] = Number((1 / Number(rates[sym])).toFixed(sym === "BTC" ? 2 : 4));
-            }
-          });
-          next["USDT"] = 1.0;
-          setPrices(next);
-        }
-      } catch (e) {
-        // Fallback to defaults on error
-      }
-    }
-
-    fetchPrices();
-    const interval = setInterval(fetchPrices, 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
-
-  // 2. Fetch user balances (fiat + crypto assets)
+  // Fetch user balances (fiat + crypto assets directly matching Assets ledger)
   const fetchAllBalances = useCallback(async () => {
     if (!user) {
       setMode("demo");
@@ -166,71 +69,52 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
       setCryptoBalance(0);
       setLiveBalance(0);
       setDemoBalance(10000);
+      setCryptoAssets([]);
       setLoading(false);
       return;
     }
 
     try {
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select(
-          "account_mode, live_balance, account_balance, available_cash, demo_balance, crypto_balances",
-        )
-        .eq("id", user.id)
-        .maybeSingle();
+      const [profRes, cryptoRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select(
+            "account_mode, live_balance, account_balance, available_cash, demo_balance, crypto_balances",
+          )
+          .eq("id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("user_crypto_balances")
+          .select("asset_symbol, balance")
+          .eq("user_id", user.id),
+      ]);
 
-      const { data: cryptoRows } = await supabase
-        .from("user_crypto_balances")
-        .select("asset_symbol, balance")
-        .eq("user_id", user.id);
+      const prof = profRes.data;
+      const cryptoRows = cryptoRes.data;
 
-      const m = (prof?.account_mode as AccountMode) ?? "demo";
       const fiatLive = Number(
         prof?.available_cash ?? prof?.live_balance ?? prof?.account_balance ?? 0,
       );
       const demo = Number(prof?.demo_balance ?? 10000);
 
-      const rowMap = new Map<string, number>();
-      (cryptoRows ?? []).forEach((r: any) => {
-        rowMap.set(String(r.asset_symbol).toUpperCase(), Number(r.balance ?? 0));
-      });
-      const jsonBalances = (prof?.crypto_balances ?? {}) as Record<string, number>;
+      // Compute identical crypto valuation as Assets page using unified helper
+      const { assets, totalCryptoUsd } = computeEnrichedCryptoAssets(
+        cryptoRows,
+        (prof?.crypto_balances ?? {}) as Record<string, number>,
+        tickers,
+      );
 
-      const allCryptoSymbols = new Set<string>([
-        "BTC",
-        "ETH",
-        "BNB",
-        "SOL",
-        "XRP",
-        "ADA",
-        "DOGE",
-        "USDT",
-        ...Array.from(rowMap.keys()),
-        ...Object.keys(jsonBalances),
-      ]);
-
-      let totalCryptoUsd = 0;
-      allCryptoSymbols.forEach((sym) => {
-        const symbolUpper = sym.toUpperCase();
-        const qty = Math.max(
-          rowMap.get(symbolUpper) ?? 0,
-          Number(jsonBalances[symbolUpper] ?? 0),
-          Number(jsonBalances[sym] ?? 0),
-        );
-        if (qty > 0) {
-          const p =
-            symbolUpper === "USDT" || symbolUpper === "USDC"
-              ? 1.0
-              : (activePrices[symbolUpper] ?? FALLBACK_PRICES[symbolUpper] ?? 1.0);
-          totalCryptoUsd += qty * p;
-        }
-      });
+      let m = (prof?.account_mode as AccountMode) ?? "demo";
+      if (!prof?.account_mode || (m === "demo" && (fiatLive > 0 || totalCryptoUsd > 0))) {
+        m = fiatLive > 0 || totalCryptoUsd > 0 ? "live" : "demo";
+      }
 
       const totalLive = Number((fiatLive + totalCryptoUsd).toFixed(2));
 
       setMode(m);
-      setFiatLiveBalance(fiatLive);
-      setCryptoBalance(Number(totalCryptoUsd.toFixed(2)));
+      setFiatLiveBalance(Number(fiatLive.toFixed(2)));
+      setCryptoBalance(totalCryptoUsd);
+      setCryptoAssets(assets);
       setLiveBalance(totalLive);
       setDemoBalance(demo);
     } catch (err) {
@@ -238,7 +122,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user, activePrices]);
+  }, [user, tickers]);
 
   useEffect(() => {
     fetchAllBalances();
@@ -254,7 +138,11 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "profiles", filter: `id=eq.${user.id}` },
-        () => fetchAllBalances(),
+        () => {
+          fetchAllBalances();
+          qc.invalidateQueries({ queryKey: ["profile", user.id] });
+          qc.invalidateQueries({ queryKey: ["profile"] });
+        },
       )
       .on(
         "postgres_changes",
@@ -264,14 +152,18 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
           table: "user_crypto_balances",
           filter: `user_id=eq.${user.id}`,
         },
-        () => fetchAllBalances(),
+        () => {
+          fetchAllBalances();
+          qc.invalidateQueries({ queryKey: ["my_crypto_wallets", user.id] });
+          qc.invalidateQueries({ queryKey: ["my_crypto_wallets"] });
+        },
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, fetchAllBalances]);
+  }, [user, fetchAllBalances, qc]);
 
   const switchMode = async (next: AccountMode) => {
     if (!user || next === mode) return;
@@ -302,6 +194,7 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
         cashBalance: fiatLiveBalance,
         cryptoBalance,
         demoBalance,
+        cryptoAssets,
         switchMode,
         loading,
         refreshBalances: fetchAllBalances,

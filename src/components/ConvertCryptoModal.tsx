@@ -24,32 +24,11 @@ import {
 } from "@/components/ui/select";
 import { RefreshCw, Sparkles, DollarSign, ArrowRight } from "lucide-react";
 import { CryptoIcon } from "@/components/CryptoIcon";
-
-const SUPPORTED_CRYPTO = [
-  { symbol: "BTC", name: "Bitcoin", icon: "₿", decimals: 6 },
-  { symbol: "ETH", name: "Ethereum", icon: "Ξ", decimals: 5 },
-  { symbol: "SOL", name: "Solana", icon: "◎", decimals: 4 },
-  { symbol: "BNB", name: "BNB", icon: "B", decimals: 4 },
-  { symbol: "XRP", name: "Ripple", icon: "✕", decimals: 2 },
-  { symbol: "ADA", name: "Cardano", icon: "₳", decimals: 2 },
-  { symbol: "DOGE", name: "Dogecoin", icon: "Ð", decimals: 2 },
-  { symbol: "USDT", name: "Tether USD", icon: "₮", decimals: 2 },
-];
-
-const PRICE_SYMBOLS = SUPPORTED_CRYPTO.filter((s) => s.symbol !== "USDT").map(
-  (s) => `${s.symbol}USDT`,
-);
-
-const FALLBACK_PRICES: Record<string, number> = {
-  USDT: 1.0,
-  BTC: 96500,
-  ETH: 3450,
-  BNB: 650,
-  SOL: 195,
-  XRP: 2.45,
-  ADA: 0.85,
-  DOGE: 0.28,
-};
+import {
+  computeEnrichedCryptoAssets,
+  CRYPTO_PRICE_SYMBOLS,
+  SUPPORTED_CRYPTO_ASSETS,
+} from "@/lib/crypto-assets";
 
 interface ConvertCryptoModalProps {
   open: boolean;
@@ -65,7 +44,7 @@ export function ConvertCryptoModal({
   const { user } = useAuth();
   const { formatCurrency } = useCurrency();
   const qc = useQueryClient();
-  const { tickers } = useBinancePrices(PRICE_SYMBOLS);
+  const { tickers } = useBinancePrices(CRYPTO_PRICE_SYMBOLS);
   const [selectedSymbol, setSelectedSymbol] = useState<string>(defaultSymbol);
   const [isConverting, setIsConverting] = useState(false);
 
@@ -104,31 +83,9 @@ export function ConvertCryptoModal({
     enabled: !!user && open,
   });
 
-  // Calculate holdings with live prices
-  const holdings = useMemo(() => {
-    const jsonBalances = ((profile as { crypto_balances?: Record<string, number> })
-      ?.crypto_balances ?? {}) as Record<string, number>;
-    const rowMap = new Map<string, number>();
-    (wallets ?? []).forEach((w: Record<string, unknown>) =>
-      rowMap.set(
-        String(w.asset_symbol || w.symbol || "").toUpperCase(),
-        Number(w.balance ?? w.amount ?? 0),
-      ),
-    );
-
-    return SUPPORTED_CRYPTO.map((meta) => {
-      const rowVal = rowMap.get(meta.symbol);
-      const jsonVal = jsonBalances[meta.symbol] ?? jsonBalances[meta.symbol.toLowerCase()];
-      const qty = Math.max(rowVal ?? 0, Number(jsonVal ?? 0));
-      const livePrice = meta.symbol === "USDT" ? 1.0 : tickers[`${meta.symbol}USDT`]?.price;
-      const price = livePrice && livePrice > 0 ? livePrice : (FALLBACK_PRICES[meta.symbol] ?? 1.0);
-      return {
-        ...meta,
-        qty,
-        price,
-        usdValue: qty * price,
-      };
-    });
+  // Calculate holdings with live prices using unified computation
+  const { assets: holdings } = useMemo(() => {
+    return computeEnrichedCryptoAssets(wallets, (profile as any)?.crypto_balances, tickers);
   }, [wallets, profile, tickers]);
 
   // Target conversion items
@@ -188,7 +145,7 @@ export function ConvertCryptoModal({
       // 2. Debit the converted crypto assets from user_crypto_balances and profiles.crypto_balances
       if (selectedSymbol === "ALL") {
         // Zero all supported crypto balances
-        for (const meta of SUPPORTED_CRYPTO) {
+        for (const meta of SUPPORTED_CRYPTO_ASSETS) {
           await supabase.from("user_crypto_balances").upsert(
             {
               user_id: user.id,
