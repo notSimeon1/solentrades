@@ -44,6 +44,16 @@ export interface EnrichedAsset extends CryptoAssetMeta {
   usdValue: number;
 }
 
+export function resolveLiveCashBalance(profile: any): number {
+  if (!profile) return 0;
+  return Number(profile.available_cash ?? profile.live_balance ?? profile.account_balance ?? 0);
+}
+
+export function resolveDemoBalance(profile: any): number {
+  if (!profile) return 10000;
+  return Number(profile.demo_balance ?? 10000);
+}
+
 /**
  * Pure function to compute consistent enriched crypto assets from
  * database rows (user_crypto_balances) + profile JSON (crypto_balances) + live ticker prices.

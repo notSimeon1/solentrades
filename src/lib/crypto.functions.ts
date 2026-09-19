@@ -1,7 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-
-import { createServerFn } from "@tanstack/react-start";
-import { supabaseAdmin } from "./admin.server";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   computeEnrichedCryptoAssets,
   CRYPTO_FALLBACK_PRICES,
@@ -64,11 +62,7 @@ export const getUserAccountPortfolio = createServerFn({ method: "POST" })
       const jsonCrypto = (profile?.crypto_balances ?? {}) as Record<string, number>;
 
       // Compute enriched crypto asset list
-      const { totalCryptoUsd, assetMap } = computeEnrichedCryptoAssets(
-        cryptoRows,
-        jsonCrypto,
-        {},
-      );
+      const { totalCryptoUsd, assetMap } = computeEnrichedCryptoAssets(cryptoRows, jsonCrypto, {});
 
       // Determine proper mode: if user has real live funds and mode is demo, default to live
       let accountMode = ((profile?.account_mode as "demo" | "live") || "live") as "demo" | "live";

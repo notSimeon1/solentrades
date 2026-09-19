@@ -50,7 +50,7 @@ export async function getOrCreateUserSupportThread(
 
     if (createErr) {
       console.error("Error creating support thread:", createErr);
-      return null;
+      throw new Error("Unable to reach customer support server, service unavailable");
     }
 
     const thread = created as SupportThread;
@@ -70,6 +70,6 @@ export async function getOrCreateUserSupportThread(
     return thread;
   } catch (e) {
     console.error("Failed to get or create support thread:", e);
-    return null;
+    throw e;
   }
 }

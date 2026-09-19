@@ -134,8 +134,9 @@ export function LiveChatWidget() {
             },
           )
           .subscribe();
-      } catch (e) {
+      } catch (e: any) {
         console.error("[chat] failed to load thread", e);
+        if (isMounted) toast.error(e.message || "Failed to connect to live support");
       }
     })();
 

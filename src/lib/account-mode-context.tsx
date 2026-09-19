@@ -92,7 +92,6 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
       const prof = profRes.data;
       const cryptoRows = cryptoRes.data;
 
-      const m = (prof?.account_mode as AccountMode) ?? "demo";
       const fiatLive = Number(
         prof?.available_cash ?? prof?.live_balance ?? prof?.account_balance ?? 0,
       );
@@ -104,6 +103,11 @@ export function AccountModeProvider({ children }: { children: ReactNode }) {
         (prof?.crypto_balances ?? {}) as Record<string, number>,
         tickers,
       );
+
+      let m = (prof?.account_mode as AccountMode) ?? "demo";
+      if (!prof?.account_mode || (m === "demo" && (fiatLive > 0 || totalCryptoUsd > 0))) {
+        m = fiatLive > 0 || totalCryptoUsd > 0 ? "live" : "demo";
+      }
 
       const totalLive = Number((fiatLive + totalCryptoUsd).toFixed(2));
 
