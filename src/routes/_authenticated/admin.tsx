@@ -889,6 +889,45 @@ function formatLastSeen(iso?: string | null): string {
   return new Date(ts).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function resolveUserPresence(
+  u: any,
+  onlineUsers: Record<string, OnlineUserInfo>,
+  lastSeenMap: Record<string, string>,
+): { isOnline: boolean; currentPath?: string; lastSeenIso?: string | null } {
+  const userId = u?.id;
+  const live = userId ? onlineUsers[userId] : undefined;
+  if (live) {
+    return {
+      isOnline: true,
+      currentPath: live.currentPath,
+      lastSeenIso: live.onlineAt,
+    };
+  }
+
+  const now = Date.now();
+  const updatedIso = u?.updated_at ?? null;
+  const signInIso = u?.last_sign_in_at ?? null;
+  const leaveIso = userId ? (lastSeenMap[userId] ?? null) : null;
+
+  const updatedTs = updatedIso ? new Date(updatedIso).getTime() : 0;
+  const signInTs = signInIso ? new Date(signInIso).getTime() : 0;
+  const leaveTs = leaveIso ? new Date(leaveIso).getTime() : 0;
+
+  const hasFreshDbHeartbeat =
+    updatedTs > 0 && now - updatedTs <= 60_000 && (!leaveTs || updatedTs > leaveTs);
+  const hasFreshSignIn =
+    signInTs > 0 && now - signInTs <= 90_000 && (!leaveTs || signInTs > leaveTs);
+
+  const freshestTs = Math.max(leaveTs, updatedTs, signInTs);
+  const lastSeenIso = freshestTs > 0 ? new Date(freshestTs).toISOString() : null;
+
+  return {
+    isOnline: hasFreshDbHeartbeat || hasFreshSignIn,
+    currentPath: undefined,
+    lastSeenIso,
+  };
+}
+
 function UsersTab({
   users,
   loading,
@@ -903,6 +942,13 @@ function UsersTab({
   const { onlineUsers, lastSeenMap } = useSitePresence();
   const [search, setSearch] = useState("");
   const [presenceFilter, setPresenceFilter] = useState<"all" | "online">("all");
+  const [, setTick] = useState(0);
+
+  // Re-evaluate 60s/90s freshness thresholds cleanly every 10s
+  useEffect(() => {
+    const t = window.setInterval(() => setTick((n) => n + 1), 10_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids"],
@@ -920,16 +966,29 @@ function UsersTab({
     await Promise.all([refetch(), rolesQuery.refetch()]);
   };
 
+  const presenceByUser = useMemo(() => {
+    const map: Record<
+      string,
+      { isOnline: boolean; currentPath?: string; lastSeenIso?: string | null }
+    > = {};
+    (users ?? []).forEach((u: any) => {
+      if (u?.id) {
+        map[u.id] = resolveUserPresence(u, onlineUsers, lastSeenMap);
+      }
+    });
+    return map;
+  }, [users, onlineUsers, lastSeenMap]);
+
   const totalCount = users?.length ?? 0;
   const onlineCount = useMemo(
-    () => (users ?? []).filter((u: any) => Boolean(onlineUsers[u.id])).length,
-    [users, onlineUsers],
+    () => (users ?? []).filter((u: any) => presenceByUser[u.id]?.isOnline).length,
+    [users, presenceByUser],
   );
 
   const visibleUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = (users ?? []).filter((u: any) => {
-      const isOnline = Boolean(onlineUsers[u.id]);
+      const isOnline = Boolean(presenceByUser[u.id]?.isOnline);
       if (presenceFilter === "online" && !isOnline) return false;
       if (!q) return true;
       return (
@@ -950,11 +1009,11 @@ function UsersTab({
 
     // Pin online users first while preserving original order within each group
     return [...filtered].sort((a: any, b: any) => {
-      const aOnline = onlineUsers[a.id] ? 1 : 0;
-      const bOnline = onlineUsers[b.id] ? 1 : 0;
+      const aOnline = presenceByUser[a.id]?.isOnline ? 1 : 0;
+      const bOnline = presenceByUser[b.id]?.isOnline ? 1 : 0;
       return bOnline - aOnline;
     });
-  }, [users, onlineUsers, search, presenceFilter]);
+  }, [users, presenceByUser, search, presenceFilter]);
 
   if (loading)
     return (
@@ -1011,17 +1070,21 @@ function UsersTab({
         </div>
       </div>
 
-      {visibleUsers.map((u: any) => (
-        <UserRow
-          key={u.id}
-          user={u}
-          isAdminUser={adminIds.has(u.id)}
-          onChange={reload}
-          tickers={tickers}
-          presence={onlineUsers[u.id]}
-          sessionLastSeen={lastSeenMap[u.id]}
-        />
-      ))}
+      {visibleUsers.map((u: any) => {
+        const resolved = presenceByUser[u.id];
+        return (
+          <UserRow
+            key={u.id}
+            user={u}
+            isAdminUser={adminIds.has(u.id)}
+            onChange={reload}
+            tickers={tickers}
+            isOnline={resolved?.isOnline ?? false}
+            currentPath={resolved?.currentPath}
+            resolvedLastSeen={resolved?.lastSeenIso}
+          />
+        );
+      })}
 
       {visibleUsers.length === 0 && (
         <Card className="p-6 text-center text-sm text-muted-foreground space-y-3">
@@ -1156,15 +1219,17 @@ function UserRow({
   isAdminUser,
   onChange,
   tickers,
-  presence,
-  sessionLastSeen,
+  isOnline,
+  currentPath,
+  resolvedLastSeen,
 }: {
   user: any;
   isAdminUser?: boolean;
   onChange: () => void | Promise<unknown>;
   tickers?: Record<string, Ticker>;
-  presence?: OnlineUserInfo;
-  sessionLastSeen?: string;
+  isOnline?: boolean;
+  currentPath?: string;
+  resolvedLastSeen?: string | null;
 }) {
   const saveUserChart = useServerFn(updateAdminChart);
   const adjustBalance = useServerFn(adjustAdminBalance);
@@ -1299,19 +1364,21 @@ function UserRow({
             <span aria-hidden="true" className="text-muted-foreground">
               ·
             </span>
-            {presence ? (
+            {isOnline ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Online</span>
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  ({presence.currentPath})
-                </span>
+                {currentPath && (
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    ({currentPath})
+                  </span>
+                )}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
                 <span className="h-2 w-2 rounded-full bg-slate-500/70" />
                 <span>Offline</span>
-                <span>· Last seen {formatLastSeen(sessionLastSeen ?? user.last_sign_in_at)}</span>
+                <span>· Last seen {formatLastSeen(resolvedLastSeen ?? user.last_sign_in_at)}</span>
               </span>
             )}
           </div>
@@ -3413,7 +3480,7 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
       if (ids.length) {
         const { data: profs } = await supabase
           .from("profiles")
-          .select("id, full_name")
+          .select("id, full_name, updated_at")
           .in("id", ids);
 
         setUserMap((prev) => {
@@ -3501,15 +3568,27 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
     }
   };
 
+  const threadPresenceMap = useMemo(() => {
+    const map: Record<
+      string,
+      { isOnline: boolean; currentPath?: string; lastSeenIso?: string | null }
+    > = {};
+    threads.forEach((t) => {
+      const u = userMap[t.user_id] ?? { id: t.user_id };
+      map[t.user_id] = resolveUserPresence(u, onlineUsers, lastSeenMap);
+    });
+    return map;
+  }, [threads, userMap, onlineUsers, lastSeenMap]);
+
   const onlineThreadCount = useMemo(
-    () => threads.filter((t) => Boolean(onlineUsers[t.user_id])).length,
-    [threads, onlineUsers],
+    () => threads.filter((t) => Boolean(threadPresenceMap[t.user_id]?.isOnline)).length,
+    [threads, threadPresenceMap],
   );
 
   const filteredThreads = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = threads.filter((t) => {
-      if (presenceFilter === "online" && !onlineUsers[t.user_id]) return false;
+      if (presenceFilter === "online" && !threadPresenceMap[t.user_id]?.isOnline) return false;
       if (!q) return true;
       const u = userMap[t.user_id];
       return (
@@ -3520,18 +3599,16 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
     });
 
     return [...filtered].sort((a, b) => {
-      const aOnline = onlineUsers[a.user_id] ? 1 : 0;
-      const bOnline = onlineUsers[b.user_id] ? 1 : 0;
+      const aOnline = threadPresenceMap[a.user_id]?.isOnline ? 1 : 0;
+      const bOnline = threadPresenceMap[b.user_id]?.isOnline ? 1 : 0;
       return bOnline - aOnline;
     });
-  }, [threads, userMap, onlineUsers, search, presenceFilter]);
+  }, [threads, userMap, threadPresenceMap, search, presenceFilter]);
 
   const activeThread = threads.find((t) => t.id === activeId);
   const activeUser = activeThread ? userMap[activeThread.user_id] : null;
-  const activePresence = activeThread ? onlineUsers[activeThread.user_id] : undefined;
-  const activeOfflineSeen = activeThread
-    ? (lastSeenMap[activeThread.user_id] ?? activeUser?.last_sign_in_at)
-    : undefined;
+  const activePresence = activeThread ? threadPresenceMap[activeThread.user_id] : undefined;
+  const activeOfflineSeen = activePresence?.lastSeenIso ?? activeUser?.last_sign_in_at;
   const activeUserName =
     activeUser?.full_name ||
     activeUser?.email?.split("@")[0] ||
@@ -3653,8 +3730,7 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
             ) : (
               filteredThreads.map((t) => {
                 const u = userMap[t.user_id];
-                const presence = onlineUsers[t.user_id];
-                const isOnline = Boolean(presence);
+                const isOnline = Boolean(threadPresenceMap[t.user_id]?.isOnline);
                 const name =
                   u?.full_name || u?.email?.split("@")[0] || `User (${t.user_id.slice(0, 6)})`;
                 const subText =
@@ -3750,10 +3826,12 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
               userId={activeThread.user_id}
               currentUserRole="support"
               recipientName={activeUserName}
-              recipientOnline={Boolean(activePresence)}
+              recipientOnline={Boolean(activePresence?.isOnline)}
               recipientStatus={
-                activePresence
-                  ? `Online · Viewing ${activePresence.currentPath || "/"}`
+                activePresence?.isOnline
+                  ? activePresence.currentPath
+                    ? `Online · Viewing ${activePresence.currentPath}`
+                    : "Online"
                   : `Offline${activeOfflineSeen ? ` · Last seen ${formatLastSeen(activeOfflineSeen)}` : ""}`
               }
               height="h-full"

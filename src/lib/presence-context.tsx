@@ -11,7 +11,7 @@ import {
 
 export type OnlineUserInfo = {
   userId: string;
-  currentPath: string;
+  currentPath?: string;
   onlineAt: string;
   tabCount: number;
 };
@@ -30,7 +30,9 @@ const SitePresenceContext = createContext<SitePresenceContextValue>({
 
 const PRESENCE_CHANNEL = "site-presence-v1";
 const HEARTBEAT_INTERVAL_MS = 10_000;
+const DB_HEARTBEAT_MIN_MS = 15_000;
 const ADMIN_POLL_INTERVAL_MS = 4_000;
+const PROFILE_ONLINE_TTL_MS = 60_000;
 
 function getOrCreateTabId(): string {
   if (typeof window === "undefined") return "ssr";
@@ -91,12 +93,14 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
 
   const [realtimeUsers, setRealtimeUsers] = useState<Record<string, OnlineUserInfo>>({});
   const [serverUsers, setServerUsers] = useState<Record<string, OnlineUserInfo>>({});
+  const [dbPulseUsers, setDbPulseUsers] = useState<Record<string, OnlineUserInfo>>({});
   const [realtimeLastSeen, setRealtimeLastSeen] = useState<Record<string, string>>({});
   const [serverLastSeen, setServerLastSeen] = useState<Record<string, string>>({});
   const [connected, setConnected] = useState(false);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const subscribedRef = useRef(false);
+  const lastDbBeatRef = useRef<number>(0);
   const pathnameRef = useRef(pathname || "/");
   pathnameRef.current = pathname || "/";
 
@@ -114,20 +118,38 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
 
   const isAdminRoute = pathname.startsWith("/admin");
 
-  // 1. Server HTTP Heartbeat + Lease (reliable across browsers, background tabs, and WebSocket drops)
+  // 1. Dual Heartbeat: Server HTTP heartbeat + Authenticated Postgres profiles.updated_at heartbeat
   useEffect(() => {
     const userId = user?.id;
     if (!userId) {
       setServerUsers({});
       setServerLastSeen({});
+      setDbPulseUsers({});
+      lastDbBeatRef.current = 0;
       return;
     }
 
     const tabId = tabIdRef.current || getOrCreateTabId();
     let active = true;
 
-    const sendHeartbeat = () => {
+    const sendDbHeartbeat = (force = false) => {
       if (!active) return;
+      const now = Date.now();
+      if (!force && now - lastDbBeatRef.current < DB_HEARTBEAT_MIN_MS) return;
+      lastDbBeatRef.current = now;
+      void supabase
+        .from("profiles")
+        .update({ updated_at: new Date(now).toISOString() })
+        .eq("id", userId)
+        .then(
+          () => {},
+          () => {},
+        );
+    };
+
+    const sendHeartbeat = (forceDb = false) => {
+      if (!active) return;
+      sendDbHeartbeat(forceDb);
       pingRef
         .current({
           data: {
@@ -139,14 +161,14 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
         .catch(() => {});
     };
 
-    // Immediate heartbeat on sign-in
-    sendHeartbeat();
+    // Immediate heartbeat on login / mount ("just logged in" or "always login" persisted session)
+    sendHeartbeat(true);
 
-    const interval = window.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+    const interval = window.setInterval(() => sendHeartbeat(false), HEARTBEAT_INTERVAL_MS);
 
     const handleVisibleOrFocus = () => {
       if (document.visibilityState === "visible") {
-        sendHeartbeat();
+        sendHeartbeat(false);
       }
     };
 
@@ -182,7 +204,7 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
     };
   }, [user?.id]);
 
-  // Send immediate server heartbeat when route changes
+  // Update server heartbeat immediately when route changes
   useEffect(() => {
     if (!user?.id) return;
     const tabId = tabIdRef.current || getOrCreateTabId();
@@ -197,7 +219,7 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
       .catch(() => {});
   }, [user?.id, pathname]);
 
-  // 2. Admin snapshot poller (only active on /admin routes so regular users make zero extra reads)
+  // 2. Admin snapshot poller + Realtime profiles table watcher (only on /admin routes)
   useEffect(() => {
     if (!user?.id || !isAdminRoute) return;
     let active = true;
@@ -214,11 +236,63 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
     };
 
     loadSnapshot();
-    const interval = window.setInterval(loadSnapshot, ADMIN_POLL_INTERVAL_MS);
+    const pollInterval = window.setInterval(loadSnapshot, ADMIN_POLL_INTERVAL_MS);
+
+    // Prune stale dbPulseUsers entries older than 60s
+    const pruneInterval = window.setInterval(() => {
+      const cutoff = Date.now() - PROFILE_ONLINE_TTL_MS;
+      setDbPulseUsers((prev) => {
+        let changed = false;
+        const next: Record<string, OnlineUserInfo> = {};
+        for (const [uid, info] of Object.entries(prev)) {
+          if (new Date(info.onlineAt).getTime() >= cutoff) {
+            next[uid] = info;
+          } else {
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 10_000);
+
+    const profilesChannel = supabase
+      .channel(`admin-profile-pulses-${Date.now()}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          const row = payload.new as { id?: string; updated_at?: string } | null;
+          if (!row?.id || !row.updated_at) return;
+          const updatedTs = new Date(row.updated_at).getTime();
+          if (Number.isNaN(updatedTs)) return;
+
+          if (Date.now() - updatedTs <= PROFILE_ONLINE_TTL_MS) {
+            setDbPulseUsers((prev) => ({
+              ...prev,
+              [row.id!]: {
+                userId: row.id!,
+                onlineAt: row.updated_at!,
+                tabCount: 1,
+              },
+            }));
+          } else {
+            // Explicit signOut pushes updated_at back 3m; clear immediately
+            setDbPulseUsers((prev) => {
+              if (!prev[row.id!]) return prev;
+              const next = { ...prev };
+              delete next[row.id!];
+              return next;
+            });
+          }
+        },
+      )
+      .subscribe();
 
     return () => {
       active = false;
-      window.clearInterval(interval);
+      window.clearInterval(pollInterval);
+      window.clearInterval(pruneInterval);
+      supabase.removeChannel(profilesChannel);
     };
   }, [user?.id, isAdminRoute]);
 
@@ -276,7 +350,7 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
               online_at: new Date().toISOString(),
             });
           } catch {
-            // Server heartbeat fallback handles presence if Realtime track fails
+            // Server & DB heartbeat fallbacks cover presence
           }
         } else if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           subscribedRef.current = false;
@@ -323,18 +397,29 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
   }, [user?.id, pathname]);
 
   const onlineUsers = useMemo(() => {
-    const merged: Record<string, OnlineUserInfo> = { ...serverUsers };
-    for (const [uid, rtInfo] of Object.entries(realtimeUsers)) {
-      const srvInfo = merged[uid];
-      if (!srvInfo || rtInfo.onlineAt >= srvInfo.onlineAt) {
+    const merged: Record<string, OnlineUserInfo> = { ...dbPulseUsers };
+    for (const [uid, srvInfo] of Object.entries(serverUsers)) {
+      const existing = merged[uid];
+      if (!existing || srvInfo.currentPath) {
         merged[uid] = {
+          ...existing,
+          ...srvInfo,
+        };
+      }
+    }
+    for (const [uid, rtInfo] of Object.entries(realtimeUsers)) {
+      const existing = merged[uid];
+      if (!existing || rtInfo.onlineAt >= existing.onlineAt || rtInfo.currentPath) {
+        merged[uid] = {
+          ...existing,
           ...rtInfo,
-          tabCount: Math.max(rtInfo.tabCount, srvInfo?.tabCount ?? 1),
+          currentPath: rtInfo.currentPath ?? existing?.currentPath,
+          tabCount: Math.max(rtInfo.tabCount, existing?.tabCount ?? 1),
         };
       }
     }
     return merged;
-  }, [serverUsers, realtimeUsers]);
+  }, [dbPulseUsers, serverUsers, realtimeUsers]);
 
   const lastSeenMap = useMemo(() => {
     const merged: Record<string, string> = { ...serverLastSeen };

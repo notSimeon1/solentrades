@@ -53,6 +53,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         loading,
         signOut: async () => {
+          const uid = session?.user?.id;
+          if (uid) {
+            try {
+              await supabase
+                .from("profiles")
+                .update({ updated_at: new Date(Date.now() - 180_000).toISOString() })
+                .eq("id", uid);
+            } catch {
+              // ignore
+            }
+          }
           await supabase.auth.signOut();
         },
       }}
