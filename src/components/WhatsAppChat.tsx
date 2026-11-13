@@ -39,6 +39,7 @@ type WhatsAppChatProps = {
   recipientName?: string;
   recipientAvatar?: string;
   recipientStatus?: string;
+  recipientOnline?: boolean;
   quickReplies?: string[];
   height?: string;
   compact?: boolean;
@@ -50,6 +51,7 @@ export function WhatsAppChat({
   currentUserRole,
   recipientName = "Solen Trades Customer Support",
   recipientStatus = "online",
+  recipientOnline = true,
   quickReplies = [
     "Deposit Help",
     "Withdrawal Status",
@@ -279,15 +281,27 @@ export function WhatsAppChat({
         <div className="flex items-center gap-3">
           <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 font-bold text-white shadow-sm">
             {currentUserRole === "user" ? "CS" : recipientName.slice(0, 2).toUpperCase()}
-            <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-[#202c33]" />
+            <span
+              className={`absolute bottom-0 right-0 h-3 w-3 rounded-full ring-2 ring-[#202c33] ${
+                recipientOnline ? "bg-emerald-400" : "bg-slate-500"
+              }`}
+            />
           </div>
           <div>
             <div className="flex items-center gap-1.5 font-semibold text-sm text-slate-100">
               {recipientName}
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
             </div>
-            <div className="flex items-center gap-1 text-[11px] text-emerald-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <div
+              className={`flex items-center gap-1.5 text-[11px] ${
+                recipientOnline || isTyping ? "text-emerald-400" : "text-slate-400"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  recipientOnline || isTyping ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+                }`}
+              />
               {isTyping ? "typing..." : recipientStatus}
             </div>
           </div>

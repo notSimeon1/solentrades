@@ -238,7 +238,7 @@ export async function adminGetOverview(userId: string) {
     supabaseAdmin.from("deposits").select("*").order("created_at", { ascending: false }),
     supabaseAdmin.from("withdrawals").select("*").order("created_at", { ascending: false }),
     supabaseAdmin.from("complaints").select("*").order("created_at", { ascending: false }),
-    supabaseAdmin.from("app_settings").select("*"),
+    supabaseAdmin.from("app_settings").select("*").not("key", "like", "presence:%"),
     supabaseAdmin
       .from("transactions")
       .select("*")

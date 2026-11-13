@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/lib/auth-context";
+import { useSitePresence, type OnlineUserInfo } from "@/lib/presence-context";
 import { WhatsAppChat } from "@/components/WhatsAppChat";
 import {
   adjustAdminBalance,
@@ -875,6 +876,19 @@ function RequestList({
   );
 }
 
+function formatLastSeen(iso?: string | null): string {
+  if (!iso) return "Never";
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return "Unknown";
+  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (diffSec < 60) return "Just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return new Date(ts).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 function UsersTab({
   users,
   loading,
@@ -886,6 +900,10 @@ function UsersTab({
   refetch: () => void | Promise<unknown>;
   tickers?: Record<string, Ticker>;
 }) {
+  const { onlineUsers, lastSeenMap } = useSitePresence();
+  const [search, setSearch] = useState("");
+  const [presenceFilter, setPresenceFilter] = useState<"all" | "online">("all");
+
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids"],
     queryFn: async () => {
@@ -901,6 +919,43 @@ function UsersTab({
   const reload = async () => {
     await Promise.all([refetch(), rolesQuery.refetch()]);
   };
+
+  const totalCount = users?.length ?? 0;
+  const onlineCount = useMemo(
+    () => (users ?? []).filter((u: any) => Boolean(onlineUsers[u.id])).length,
+    [users, onlineUsers],
+  );
+
+  const visibleUsers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = (users ?? []).filter((u: any) => {
+      const isOnline = Boolean(onlineUsers[u.id]);
+      if (presenceFilter === "online" && !isOnline) return false;
+      if (!q) return true;
+      return (
+        String(u.full_name ?? "")
+          .toLowerCase()
+          .includes(q) ||
+        String(u.email ?? "")
+          .toLowerCase()
+          .includes(q) ||
+        String(u.country ?? "")
+          .toLowerCase()
+          .includes(q) ||
+        String(u.id ?? "")
+          .toLowerCase()
+          .includes(q)
+      );
+    });
+
+    // Pin online users first while preserving original order within each group
+    return [...filtered].sort((a: any, b: any) => {
+      const aOnline = onlineUsers[a.id] ? 1 : 0;
+      const bOnline = onlineUsers[b.id] ? 1 : 0;
+      return bOnline - aOnline;
+    });
+  }, [users, onlineUsers, search, presenceFilter]);
+
   if (loading)
     return (
       <Card className="p-6">
@@ -910,16 +965,87 @@ function UsersTab({
 
   return (
     <div className="space-y-3">
-      {users?.map((u: any) => (
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+          {onlineCount > 0 && (
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          )}
+          <span className="font-semibold text-foreground">{onlineCount} Online</span>
+          <span aria-hidden="true">·</span>
+          <span>{totalCount} Total Users</span>
+        </div>
+
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, email, or country..."
+            className="h-8 pl-8 text-xs"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 rounded-lg bg-muted/60 p-1 shrink-0 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setPresenceFilter("all")}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
+              presenceFilter === "all"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            All Users ({totalCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setPresenceFilter("online")}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
+              presenceFilter === "online"
+                ? "bg-emerald-600 text-white shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Online Only ({onlineCount})
+          </button>
+        </div>
+      </div>
+
+      {visibleUsers.map((u: any) => (
         <UserRow
           key={u.id}
           user={u}
           isAdminUser={adminIds.has(u.id)}
           onChange={reload}
           tickers={tickers}
+          presence={onlineUsers[u.id]}
+          sessionLastSeen={lastSeenMap[u.id]}
         />
       ))}
-      {!users?.length && <Card className="p-6 text-sm text-muted-foreground">No users yet.</Card>}
+
+      {visibleUsers.length === 0 && (
+        <Card className="p-6 text-center text-sm text-muted-foreground space-y-3">
+          <p>
+            {presenceFilter === "online"
+              ? "No users are currently online right now."
+              : totalCount === 0
+                ? "No users yet."
+                : "No users match your search."}
+          </p>
+          {(presenceFilter === "online" || search.trim().length > 0) && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setPresenceFilter("all");
+                setSearch("");
+              }}
+            >
+              Show All Users
+            </Button>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
@@ -1030,11 +1156,15 @@ function UserRow({
   isAdminUser,
   onChange,
   tickers,
+  presence,
+  sessionLastSeen,
 }: {
   user: any;
   isAdminUser?: boolean;
   onChange: () => void | Promise<unknown>;
   tickers?: Record<string, Ticker>;
+  presence?: OnlineUserInfo;
+  sessionLastSeen?: string;
 }) {
   const saveUserChart = useServerFn(updateAdminChart);
   const adjustBalance = useServerFn(adjustAdminBalance);
@@ -1164,7 +1294,27 @@ function UserRow({
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="font-semibold">{user.full_name ?? "—"}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold">{user.full_name ?? "—"}</span>
+            <span aria-hidden="true" className="text-muted-foreground">
+              ·
+            </span>
+            {presence ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Online</span>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  ({presence.currentPath})
+                </span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+                <span className="h-2 w-2 rounded-full bg-slate-500/70" />
+                <span>Offline</span>
+                <span>· Last seen {formatLastSeen(sessionLastSeen ?? user.last_sign_in_at)}</span>
+              </span>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground">{user.email ?? user.id}</div>
           <div className="text-xs text-muted-foreground">
             Country: {user.country ?? "Australia"}
@@ -3200,12 +3350,14 @@ function AdminSignalsTab({ tickers }: { tickers?: Record<string, Ticker> }) {
 }
 
 function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
+  const { onlineUsers, lastSeenMap } = useSitePresence();
   const [threads, setThreads] = useState<any[]>([]);
   const [userMap, setUserMap] = useState<Record<string, any>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeIdRef = useRef<string | null>(null);
   const [search, setSearch] = useState("");
+  const [presenceFilter, setPresenceFilter] = useState<"all" | "online">("all");
   const [clearing, setClearing] = useState(false);
 
   // Sync activeIdRef whenever activeId state changes
@@ -3349,19 +3501,37 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
     }
   };
 
-  const filteredThreads = threads.filter((t) => {
-    if (!search.trim()) return true;
-    const u = userMap[t.user_id];
-    const q = search.toLowerCase();
-    return (
-      (u?.full_name ?? "").toLowerCase().includes(q) ||
-      (u?.email ?? "").toLowerCase().includes(q) ||
-      t.user_id.toLowerCase().includes(q)
-    );
-  });
+  const onlineThreadCount = useMemo(
+    () => threads.filter((t) => Boolean(onlineUsers[t.user_id])).length,
+    [threads, onlineUsers],
+  );
+
+  const filteredThreads = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = threads.filter((t) => {
+      if (presenceFilter === "online" && !onlineUsers[t.user_id]) return false;
+      if (!q) return true;
+      const u = userMap[t.user_id];
+      return (
+        (u?.full_name ?? "").toLowerCase().includes(q) ||
+        (u?.email ?? "").toLowerCase().includes(q) ||
+        t.user_id.toLowerCase().includes(q)
+      );
+    });
+
+    return [...filtered].sort((a, b) => {
+      const aOnline = onlineUsers[a.user_id] ? 1 : 0;
+      const bOnline = onlineUsers[b.user_id] ? 1 : 0;
+      return bOnline - aOnline;
+    });
+  }, [threads, userMap, onlineUsers, search, presenceFilter]);
 
   const activeThread = threads.find((t) => t.id === activeId);
   const activeUser = activeThread ? userMap[activeThread.user_id] : null;
+  const activePresence = activeThread ? onlineUsers[activeThread.user_id] : undefined;
+  const activeOfflineSeen = activeThread
+    ? (lastSeenMap[activeThread.user_id] ?? activeUser?.last_sign_in_at)
+    : undefined;
   const activeUserName =
     activeUser?.full_name ||
     activeUser?.email?.split("@")[0] ||
@@ -3374,15 +3544,22 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
         <div className="flex items-center gap-2.5 shrink-0">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
             <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              {onlineThreadCount > 0 && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              )}
+              <span
+                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                  onlineThreadCount > 0 ? "bg-emerald-500" : "bg-slate-500"
+                }`}
+              ></span>
             </span>
           </div>
           <div>
             <div className="text-sm font-bold text-white flex items-center gap-2">
               Customer Support Console
-              <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400 font-semibold border border-emerald-500/30">
-                {threads.length} {threads.length === 1 ? "User" : "Users"}
+              <span className="text-xs font-medium text-slate-400 tabular-nums">
+                {onlineThreadCount} Online · {threads.length}{" "}
+                {threads.length === 1 ? "User" : "Users"}
               </span>
             </div>
           </div>
@@ -3425,18 +3602,59 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
       <div className="grid grid-cols-[30%_70%] min-w-0 flex-1 overflow-hidden divide-x divide-[#222d34]">
         {/* Left Side (30% Width): Customer Accounts List */}
         <div className="flex flex-col bg-[#111b21] min-w-0 overflow-hidden">
-          <div className="px-3 py-2 text-[10px] font-bold text-slate-400 border-b border-[#222d34]/60 uppercase tracking-wider flex justify-between items-center bg-[#111b21]">
-            <span className="truncate">Users ({filteredThreads.length})</span>
+          <div className="px-3 py-2 text-[11px] font-semibold text-slate-400 border-b border-[#222d34]/60 flex justify-between items-center gap-2 bg-[#111b21]">
+            <span className="truncate tabular-nums">Users ({filteredThreads.length})</span>
+            <div className="flex items-center gap-1 rounded-md bg-[#202c33] p-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setPresenceFilter("all")}
+                className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors whitespace-nowrap shrink-0 ${
+                  presenceFilter === "all"
+                    ? "bg-[#2a3942] text-white"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setPresenceFilter("online")}
+                className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors whitespace-nowrap shrink-0 ${
+                  presenceFilter === "online"
+                    ? "bg-emerald-600 text-white"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Online ({onlineThreadCount})
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {filteredThreads.length === 0 ? (
-              <p className="p-4 text-center text-xs text-slate-400">
-                {threads.length === 0 ? "No active support chats yet." : "No matching user found."}
-              </p>
+              <div className="p-4 text-center text-xs text-slate-400 space-y-2">
+                <p>
+                  {presenceFilter === "online"
+                    ? "No support users are currently online."
+                    : threads.length === 0
+                      ? "No active support chats yet."
+                      : "No matching user found."}
+                </p>
+                {presenceFilter === "online" && (
+                  <button
+                    type="button"
+                    onClick={() => setPresenceFilter("all")}
+                    className="text-emerald-400 hover:underline font-medium"
+                  >
+                    Show all users
+                  </button>
+                )}
+              </div>
             ) : (
               filteredThreads.map((t) => {
                 const u = userMap[t.user_id];
+                const presence = onlineUsers[t.user_id];
+                const isOnline = Boolean(presence);
                 const name =
                   u?.full_name || u?.email?.split("@")[0] || `User (${t.user_id.slice(0, 6)})`;
                 const subText =
@@ -3464,14 +3682,18 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
                     {/* User Avatar Circle */}
                     <div className="relative shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600/30 text-emerald-300 font-bold text-xs border border-emerald-500/30">
                       {name.charAt(0).toUpperCase()}
-                      <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-[#111b21]" />
+                      <span
+                        className={`absolute bottom-0 right-0 h-2 w-2 rounded-full ring-2 ring-[#111b21] ${
+                          isOnline ? "bg-emerald-500" : "bg-slate-500"
+                        }`}
+                      />
                     </div>
 
                     {/* Account Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
                         <span className="font-semibold text-xs text-white truncate">{name}</span>
-                        <span className="text-[9px] text-slate-400 shrink-0">
+                        <span className="text-[9px] text-slate-400 shrink-0 tabular-nums">
                           {t.last_message_at
                             ? new Date(t.last_message_at).toLocaleTimeString([], {
                                 hour: "2-digit",
@@ -3485,7 +3707,15 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
                       </div>
 
                       <div className="flex items-center justify-between mt-0.5 gap-1">
-                        <span className="text-[10px] text-slate-400 truncate">{subText}</span>
+                        <span className="text-[10px] text-slate-400 truncate">
+                          <span
+                            className={isOnline ? "text-emerald-400 font-medium" : "text-slate-500"}
+                          >
+                            {isOnline ? "Online" : "Offline"}
+                          </span>
+                          {" · "}
+                          {subText}
+                        </span>
                         {unread > 0 && (
                           <span className="rounded-full bg-emerald-500 px-1.5 py-0.2 text-[9px] font-black text-black shrink-0 animate-bounce">
                             {unread}
@@ -3520,7 +3750,12 @@ function AdminSupportTab({ users: overviewUsers }: { users?: any[] }) {
               userId={activeThread.user_id}
               currentUserRole="support"
               recipientName={activeUserName}
-              recipientStatus="Live User • Connected"
+              recipientOnline={Boolean(activePresence)}
+              recipientStatus={
+                activePresence
+                  ? `Online · Viewing ${activePresence.currentPath || "/"}`
+                  : `Offline${activeOfflineSeen ? ` · Last seen ${formatLastSeen(activeOfflineSeen)}` : ""}`
+              }
               height="h-full"
               quickReplies={[
                 "How can I assist you today?",
