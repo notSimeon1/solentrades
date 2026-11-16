@@ -33,6 +33,22 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
+    optimizeDeps: {
+      entries: ["src/router.tsx", "src/routes/**/*.tsx"],
+      include: [
+        "@supabase/supabase-js",
+        "@tanstack/react-query",
+        "framer-motion",
+        "lucide-react",
+        "recharts",
+        "lightweight-charts",
+        "sonner",
+        "date-fns",
+        "clsx",
+        "tailwind-merge",
+        "class-variance-authority",
+      ],
+    },
     plugins: [mcpPlugin(), vite7RolldownBridge()],
   },
 });

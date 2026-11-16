@@ -37,6 +37,20 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  if (
+    typeof window !== "undefined" &&
+    /Failed to fetch dynamically imported module|Importing a module script failed/i.test(
+      error?.message ?? "",
+    )
+  ) {
+    const key = "solen:chunk-reload";
+    const last = Number(sessionStorage.getItem(key) || "0");
+    if (Date.now() - last > 10000) {
+      sessionStorage.setItem(key, String(Date.now()));
+      window.location.reload();
+      return null;
+    }
+  }
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">

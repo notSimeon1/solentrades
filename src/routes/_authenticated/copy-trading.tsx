@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAccountMode } from "@/lib/account-mode-context";
 import { useAuth } from "@/lib/auth-context";
 import { useCurrency } from "@/lib/currency-context";
+import { formatRemainingDuration } from "@/lib/profit-reconciler";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,7 +61,7 @@ function CopyTradingPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from("user_copy_allocations")
-        .select("*, copy_trading_tiers(tier_name, strategist_name)")
+        .select("*, copy_trading_tiers(tier_name, strategist_name, lock_in_days)")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       return data ?? [];
@@ -110,38 +111,58 @@ function CopyTradingPage() {
       {allocations && allocations.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-lg font-semibold">Your Active Allocations</h2>
-          {allocations.map((a: any) => (
-            <Card key={a.id} className="p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="font-semibold">{a.copy_trading_tiers?.tier_name ?? "—"}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Strategist: {a.copy_trading_tiers?.strategist_name ?? "—"}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Allocated: ${Number(a.allocated_amount).toFixed(2)}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-success tabular-nums">
-                      +${Number(a.current_profit).toFixed(2)}
+          {allocations.map((a: any) => {
+            const isActive = a.status === "active" || a.status === "running";
+            const lockInDays = Math.max(1, Number(a.copy_trading_tiers?.lock_in_days ?? 30));
+            const expIso = new Date(
+              new Date(a.created_at).getTime() + lockInDays * 86400 * 1000,
+            ).toISOString();
+            const remaining = formatRemainingDuration(expIso);
+            return (
+              <Card key={a.id} className="p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold flex items-center gap-2">
+                      <span>{a.copy_trading_tiers?.tier_name ?? "—"}</span>
+                      {a.account_mode === "demo" && (
+                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/40 text-[9px]">
+                          DEMO
+                        </Badge>
+                      )}
                     </div>
-                    <div className="text-xs text-muted-foreground">Current profit</div>
+                    <div className="text-xs text-muted-foreground">
+                      Strategist: {a.copy_trading_tiers?.strategist_name ?? "—"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Allocated: ${Number(a.allocated_amount).toFixed(2)} ·{" "}
+                      {isActive
+                        ? `Expires: ${new Date(expIso).toLocaleDateString()} (${remaining})`
+                        : `Expired: ${new Date(expIso).toLocaleDateString()} · Principal returned`}
+                    </div>
                   </div>
-                  <Badge
-                    className={
-                      a.status === "active"
-                        ? "bg-success/20 text-success border-success/40"
-                        : "bg-muted text-muted-foreground"
-                    }
-                  >
-                    {a.status}
-                  </Badge>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="text-sm font-bold text-success tabular-nums">
+                        +${Number(a.current_profit).toFixed(2)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {isActive ? "Accrued profit" : "Total earned"}
+                      </div>
+                    </div>
+                    <Badge
+                      className={
+                        isActive
+                          ? "bg-success/20 text-success border-success/40"
+                          : "bg-muted text-muted-foreground"
+                      }
+                    >
+                      {isActive ? "Active" : "Expired"}
+                    </Badge>
+                  </div>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -155,6 +176,8 @@ function CopyTradingPage() {
 }
 
 function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; index: number }) {
+  const { user } = useAuth();
+  const { mode } = useAccountMode();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(String(tier.required_capital));
@@ -219,6 +242,7 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
           allocated_amount: usd,
           current_profit: 0,
           status: "active",
+          account_mode: mode,
         } as never);
         if (copyErr) throw copyErr;
 
@@ -228,6 +252,7 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
           amount: usd,
           asset_name: `Copy Trading: ${tier.tier_name}`,
           status: "completed",
+          account_mode: mode,
         } as never);
       }
 

@@ -38,7 +38,6 @@ import {
   Zap,
   Cpu,
   Layers,
-  Bitcoin,
   Wallet,
   Camera,
   ArrowDownUp,
@@ -165,12 +164,6 @@ export function Navbar() {
           label: "Instant Crypto Swapper",
           icon: <ArrowDownUp className="h-4 w-4" />,
           badge: { label: "Instant", tone: "green" },
-        },
-        {
-          to: "/buy-bitcoin",
-          label: "Buy Bitcoin",
-          icon: <Bitcoin className="h-4 w-4" />,
-          badge: { label: "Instant", tone: "gold" },
         },
         {
           to: "/buy-xrp",

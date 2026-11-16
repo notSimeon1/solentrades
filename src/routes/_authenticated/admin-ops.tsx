@@ -714,8 +714,8 @@ function PaymentsTab() {
           <CreditCard className="h-4 w-4 text-primary" /> System payment accounts
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Edit the account details users see on the Deposit and Buy Bitcoin pages. Saving updates
-          the live instructions instantly.
+          Edit the account details users see on the Deposit page. Saving updates the live
+          instructions instantly.
         </p>
       </Card>
 

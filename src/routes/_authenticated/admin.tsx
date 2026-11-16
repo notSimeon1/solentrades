@@ -1632,16 +1632,44 @@ function KycTab({
   };
 
   const openDoc = async (path: string) => {
+    if (!path) {
+      toast.error("No document attached");
+      return;
+    }
+    if (path.startsWith("data:") || path.startsWith("http://") || path.startsWith("https://")) {
+      const win = window.open("", "_blank", "noopener,noreferrer");
+      if (win) {
+        if (path.startsWith("data:image/")) {
+          win.document.write(
+            `<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;background:#000;"><img src="${path}" style="max-width:95%;max-height:95vh;border-radius:12px;" /></div>`,
+          );
+        } else if (path.startsWith("data:")) {
+          win.document.write(
+            `<iframe src="${path}" style="width:100%;height:100vh;border:none;"></iframe>`,
+          );
+        } else {
+          win.location.href = path;
+        }
+      }
+      return;
+    }
     try {
       const res = await getDocUrl({ data: { path } });
-      if (!res?.url) {
-        toast.error("Could not generate document URL");
+      if (res?.url) {
+        window.open(res.url, "_blank", "noopener,noreferrer");
         return;
       }
-      window.open(res.url, "_blank", "noopener,noreferrer");
-    } catch (err: any) {
-      toast.error(err.message ?? "Could not open document");
+    } catch {
+      // Fallback to client-side signed URLs across buckets
     }
+    for (const bucket of ["kyc-documents", "deposit-receipts", "support_attachments"]) {
+      const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 600);
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+    }
+    toast.error("Could not open document");
   };
 
   if (loading)
@@ -2233,11 +2261,10 @@ const KNOWN_WALLET_CONFIGS: WalletMeta[] = [
     symbol: "BTC",
     network: "Bitcoin Native Mainnet",
     category: "crypto",
-    description:
-      "Native Bitcoin mainnet address used for BTC deposits on /deposit and /buy-bitcoin",
+    description: "Native Bitcoin mainnet address used for BTC deposits on /deposit",
     placeholder: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
     badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/30",
-    usage: "/deposit, /buy-bitcoin",
+    usage: "/deposit",
   },
   {
     key: "deposit_wallet_eth",
@@ -2476,8 +2503,7 @@ export function AdminWalletsTab({
               Edit the official cryptocurrency addresses that users pay to. When you edit and save
               any address below, all user-facing screens (
               <span className="font-semibold text-foreground">/deposit</span>,{" "}
-              <span className="font-semibold text-foreground">/buy-xrp</span>,{" "}
-              <span className="font-semibold text-foreground">/buy-bitcoin</span>, and fee prompts)
+              <span className="font-semibold text-foreground">/buy-xrp</span>, and fee prompts)
               immediately update in real time with the new address and QR codes.
             </p>
           </div>

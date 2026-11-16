@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { reconcilePositions } from "@/lib/profit-reconciler";
 
 export const activateBotServerFn = createServerFn({ method: "POST" })
   .validator(
@@ -148,15 +149,17 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
       ).toISOString();
 
       // 5. Insert active bot record with clean schema-matching columns
+      const nowIso = new Date().toISOString();
       const cleanBotPayload = {
         user_id: data.userId,
         bot_id: data.botId,
         invested_amount: data.amount,
-        activation_date: new Date().toISOString(),
+        activation_date: nowIso,
         expiration_date: expirationDate,
-        last_payout_at: new Date().toISOString(),
+        last_payout_at: nowIso,
         current_profit: 0,
         status: "active",
+        account_mode: data.mode,
       };
 
       const { error: botErr } = await supabaseAdmin
@@ -222,3 +225,14 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
       };
     }
   });
+
+export const reconcileAllPositionsServerFn = createServerFn({ method: "POST" }).handler(
+  async () => {
+    try {
+      return await reconcilePositions(supabaseAdmin);
+    } catch (err) {
+      console.warn("[reconcileAllPositionsServerFn]", err);
+      return null;
+    }
+  },
+);

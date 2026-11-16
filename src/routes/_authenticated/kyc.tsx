@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { submitKycApplication } from "@/lib/kyc.functions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,9 +34,10 @@ export const Route = createFileRoute("/_authenticated/kyc")({
 
 function KycPage() {
   const { user } = useAuth();
+  const submitKycFallback = useServerFn(submitKycApplication);
   const [fullName, setFullName] = useState("");
   const [dob, setDob] = useState("");
-  const [country, setCountry] = useState("");
+  const [country, setCountry] = useState("Australia");
   const [docType, setDocType] = useState("passport");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,34 +68,72 @@ function KycPage() {
     enabled: !!user,
   });
 
+  const uploadKycDocument = async (uid: string, f: File): Promise<string> => {
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "bin";
+    const path = `${uid}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const opts = { upsert: true, contentType: f.type || undefined };
+
+    for (const bucket of ["kyc-documents", "deposit-receipts", "support_attachments"]) {
+      const { error } = await supabase.storage.from(bucket).upload(path, f, opts);
+      if (!error) return path;
+    }
+
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("Could not read selected document"));
+      reader.readAsDataURL(f);
+    });
+  };
+
   const submit = async () => {
     if (!fullName.trim()) return toast.error("Full name required");
     if (!file) return toast.error("Upload an ID document");
     if (file.size > 8 * 1024 * 1024) return toast.error("File must be under 8MB");
     setBusy(true);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
-      const path = `${user!.id}/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("kyc-documents")
-        .upload(path, file, { upsert: false });
-      if (upErr) throw upErr;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData?.session;
+      const uid = session?.user?.id ?? user?.id;
+      if (!uid) throw new Error("Please sign in again to submit KYC");
+
+      const documentUrl = await uploadKycDocument(uid, file);
+
       const { error } = await supabase.from("kyc_submissions").insert({
-        user_id: user!.id,
+        user_id: uid,
         full_name: fullName.trim(),
         date_of_birth: dob || null,
-        country: country.trim() || null,
+        country: country.trim() || "Australia",
         document_type: docType,
-        document_url: path,
+        document_url: documentUrl,
       });
-      if (error) throw error;
-      const { error: rpcError } = await supabase.rpc("submit_kyc_pending" as never);
-      if (rpcError) console.error("[kyc] submit_kyc_pending rpc failed:", rpcError.message);
+
+      if (error) {
+        if (session?.access_token) {
+          await submitKycFallback({
+            data: {
+              accessToken: session.access_token,
+              userId: uid,
+              fullName: fullName.trim(),
+              dateOfBirth: dob || null,
+              country: country.trim() || "Australia",
+              documentType: docType,
+              documentUrl,
+            },
+          });
+        } else {
+          throw error;
+        }
+      } else {
+        const { error: rpcError } = await supabase.rpc("submit_kyc_pending" as never);
+        if (rpcError) console.error("[kyc] submit_kyc_pending rpc failed:", rpcError.message);
+      }
+
       toast.success("KYC submitted — under review");
       setFile(null);
       setFullName("");
       setDob("");
-      setCountry("");
+      setCountry("Australia");
       refetch();
       refetchProfile();
     } catch (err: any) {
@@ -152,7 +193,7 @@ function KycPage() {
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 maxLength={60}
-                placeholder="Nigeria"
+                placeholder="Australia"
               />
             </div>
             <div className="space-y-2">

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { activateBotServerFn } from "@/lib/bot.functions";
+import { formatRemainingDuration } from "@/lib/profit-reconciler";
 import { useAuth } from "@/lib/auth-context";
 import { useAccountMode } from "@/lib/account-mode-context";
 import { useCurrency } from "@/lib/currency-context";
@@ -116,36 +117,52 @@ function AiBotsPage() {
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" /> Your Active Bots
           </h2>
-          {activeBots.map((ab: any) => (
-            <Card key={ab.id} className="p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="font-semibold">{ab.trading_bots?.name ?? "Bot"}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Invested: ${Number(ab.invested_amount).toFixed(2)} · Expires:{" "}
-                    {new Date(ab.expiration_date).toLocaleDateString()}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-success tabular-nums">
-                      +${Number(ab.current_profit).toFixed(2)}
+          {activeBots.map((ab: any) => {
+            const isActive = ab.status === "active" || ab.status === "running";
+            const expIso = ab.expiration_date;
+            const remaining = formatRemainingDuration(expIso);
+            return (
+              <Card key={ab.id} className="p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold flex items-center gap-2">
+                      <span>{ab.trading_bots?.name ?? "Bot"}</span>
+                      {ab.account_mode === "demo" && (
+                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/40 text-[9px]">
+                          DEMO
+                        </Badge>
+                      )}
                     </div>
-                    <div className="text-xs text-muted-foreground">Current profit</div>
+                    <div className="text-xs text-muted-foreground">
+                      Invested: ${Number(ab.invested_amount).toFixed(2)} ·{" "}
+                      {isActive
+                        ? `Expires: ${new Date(expIso).toLocaleDateString()} (${remaining})`
+                        : `Expired: ${new Date(expIso).toLocaleDateString()} · Principal returned`}
+                    </div>
                   </div>
-                  <Badge
-                    className={
-                      ab.status === "running"
-                        ? "bg-success/20 text-success border-success/40"
-                        : "bg-muted text-muted-foreground"
-                    }
-                  >
-                    {ab.status}
-                  </Badge>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="text-sm font-bold text-success tabular-nums">
+                        +${Number(ab.current_profit).toFixed(2)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {isActive ? "Accrued profit" : "Total earned"}
+                      </div>
+                    </div>
+                    <Badge
+                      className={
+                        isActive
+                          ? "bg-success/20 text-success border-success/40"
+                          : "bg-muted text-muted-foreground"
+                      }
+                    >
+                      {isActive ? "Active" : "Expired"}
+                    </Badge>
+                  </div>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -332,15 +349,18 @@ function BotCard({
           .eq("id", user!.id);
       }
 
+      const durationDays = Math.max(1, Number(bot.duration_days ?? 30));
+      const nowIso = new Date().toISOString();
       const { error: botErr } = await supabase.from("user_active_bots").insert({
         user_id: user!.id,
         bot_id: bot.id,
         invested_amount: usd,
-        activation_date: new Date().toISOString(),
-        expiration_date: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
-        last_payout_at: new Date().toISOString(),
+        activation_date: nowIso,
+        expiration_date: new Date(Date.now() + durationDays * 86400 * 1000).toISOString(),
+        last_payout_at: nowIso,
         current_profit: 0,
         status: "active",
+        account_mode: mode,
       } as never);
 
       if (botErr) throw botErr;

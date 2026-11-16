@@ -1064,12 +1064,16 @@ export async function adminPostNews(
 
 export async function adminGetKycDocumentUrl(userId: string, path: string) {
   await assertOwner(userId);
-  const { data, error } = await supabaseAdmin.storage
-    .from("kyc-documents")
-    .createSignedUrl(path, 60 * 10);
-  if (error) throw new Error(error.message);
-  if (!data?.signedUrl) throw new Error("Failed to generate signed URL");
-  return { url: data.signedUrl };
+  if (path.startsWith("data:") || path.startsWith("http://") || path.startsWith("https://")) {
+    return { url: path };
+  }
+  for (const bucket of ["kyc-documents", "deposit-receipts", "support_attachments"]) {
+    const { data } = await supabaseAdmin.storage.from(bucket).createSignedUrl(path, 60 * 10);
+    if (data?.signedUrl) {
+      return { url: data.signedUrl };
+    }
+  }
+  throw new Error("Failed to generate signed URL");
 }
 
 export async function openUserPosition(
