@@ -3,6 +3,8 @@ import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { useAuthedServerFn } from "@/lib/auth-token";
+import { executeSwapServerFn } from "@/lib/wallet.functions";
 import { useBinancePrices } from "@/hooks/useBinancePrices";
 import { soundFX } from "@/lib/sound-engine";
 import { CryptoIcon } from "@/components/CryptoIcon";
@@ -57,6 +59,7 @@ function InstantSwapPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const runSwap = useAuthedServerFn(executeSwapServerFn);
 
   const [fromSymbol, setFromSymbol] = useState("USDT");
   const [toSymbol, setToSymbol] = useState("BTC");
@@ -169,67 +172,17 @@ function InstantSwapPage() {
     soundFX.triggerHaptic(40);
 
     try {
-      const currentFromBal = getBalance(fromSymbol);
-      if (inputNum > currentFromBal) {
-        throw new Error(`Insufficient ${fromSymbol} balance.`);
-      }
-
-      const newFromBal = Number(Math.max(0, currentFromBal - inputNum).toFixed(8));
-      const currentToBal = getBalance(toSymbol);
-      const newToBal = Number((currentToBal + netOutput).toFixed(8));
-
-      // 1. Prepare updated JSON map for crypto_balances
-      const updatedJson = {
-        ...(((profile as { crypto_balances?: Record<string, number> })?.crypto_balances ??
-          {}) as Record<string, number>),
-        [fromSymbol]: newFromBal,
-        [toSymbol]: newToBal,
-      };
-
-      // 2. Upsert both asset symbols in user_crypto_balances table
-      await Promise.all([
-        supabase.from("user_crypto_balances").upsert(
-          {
-            user_id: user.id,
-            asset_symbol: fromSymbol,
-            balance: newFromBal,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id,asset_symbol" },
-        ),
-        supabase.from("user_crypto_balances").upsert(
-          {
-            user_id: user.id,
-            asset_symbol: toSymbol,
-            balance: newToBal,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id,asset_symbol" },
-        ),
-      ]);
-
-      // 3. Update profiles table crypto_balances JSON
-      const { error: profErr } = await supabase
-        .from("profiles")
-        .update({
-          crypto_balances: updatedJson as unknown as Record<string, number>,
-        })
-        .eq("id", user.id);
-
-      if (profErr) throw profErr;
-
-      // 4. Record transaction log
-      await supabase.from("transactions").insert({
-        user_id: user.id,
-        type: "trade",
-        amount: inputNum * fromPrice,
-        description: `Instant Swap: ${inputNum.toFixed(4)} ${fromSymbol} → ${netOutput.toFixed(4)} ${toSymbol}`,
-        status: "approved",
+      const res = await runSwap({
+        data: {
+          fromSymbol,
+          toSymbol,
+          fromAmount: inputNum,
+        },
       });
 
       soundFX.playDepositBonus();
       toast.success(
-        `Swapped ${inputNum.toFixed(4)} ${fromSymbol} for ${netOutput.toFixed(4)} ${toSymbol} successfully!`,
+        `Swapped ${inputNum.toFixed(4)} ${fromSymbol} for ${Number(res.netOutput ?? netOutput).toFixed(4)} ${toSymbol} successfully!`,
       );
 
       setFromAmount("");

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
+import { useAuthedServerFn } from "@/lib/auth-token";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -87,9 +87,9 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
     select: (s) => s.location.pathname,
   });
 
-  const pingFn = useServerFn(pingUserPresence);
-  const leaveFn = useServerFn(leaveUserPresence);
-  const snapshotFn = useServerFn(getSitePresenceSnapshot);
+  const pingFn = useAuthedServerFn(pingUserPresence);
+  const leaveFn = useAuthedServerFn(leaveUserPresence);
+  const snapshotFn = useAuthedServerFn(getSitePresenceSnapshot);
 
   const [realtimeUsers, setRealtimeUsers] = useState<Record<string, OnlineUserInfo>>({});
   const [serverUsers, setServerUsers] = useState<Record<string, OnlineUserInfo>>({});
@@ -153,7 +153,6 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
       pingRef
         .current({
           data: {
-            userId,
             tabId,
             currentPath: pathnameRef.current || "/",
           },
@@ -176,7 +175,6 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
       leaveRef
         .current({
           data: {
-            userId,
             tabId,
           },
         })
@@ -196,7 +194,6 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
       leaveRef
         .current({
           data: {
-            userId,
             tabId,
           },
         })
@@ -211,7 +208,6 @@ export function SitePresenceProvider({ children }: { children: React.ReactNode }
     pingRef
       .current({
         data: {
-          userId: user.id,
           tabId,
           currentPath: pathname || "/",
         },

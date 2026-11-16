@@ -44,7 +44,7 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { TradingChart, type Candle } from "@/components/TradingChart";
 import type { Time } from "lightweight-charts";
-import { useServerFn } from "@tanstack/react-start";
+import { useAuthedServerFn } from "@/lib/auth-token";
 import { closePosition, openPosition } from "@/lib/admin.functions";
 import { useBinancePrices } from "@/hooks/useBinancePrices";
 
@@ -264,8 +264,8 @@ function Dashboard() {
   const [magnet, setMagnet] = useState(false);
   const [crosshair, setCrosshair] = useState(true);
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const openPositionFn = useServerFn(openPosition);
-  const closePositionFn = useServerFn(closePosition);
+  const openPositionFn = useAuthedServerFn(openPosition);
+  const closePositionFn = useAuthedServerFn(closePosition);
   const aiBusyRef = useRef(false);
 
   const { data: profile } = useQuery({
@@ -1060,7 +1060,7 @@ function TradePanel({
   const [leverage, setLeverage] = useState("10");
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
-  const openPositionFn = useServerFn(openPosition);
+  const openPositionFn = useAuthedServerFn(openPosition);
 
   const open = async (side: "buy" | "sell") => {
     if (!userId) return;
@@ -1154,7 +1154,7 @@ function LivePositions({
   userId?: string;
   qc: ReturnType<typeof useQueryClient>;
 }) {
-  const closePositionFn = useServerFn(closePosition);
+  const closePositionFn = useAuthedServerFn(closePosition);
   const { data: positions } = useQuery({
     queryKey: ["positions", userId],
     queryFn: async () => {

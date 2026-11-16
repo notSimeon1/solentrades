@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAccountMode } from "@/lib/account-mode-context";
 import { useAuth } from "@/lib/auth-context";
+import { useAuthedServerFn } from "@/lib/auth-token";
+import { subscribeCopyTraderServerFn } from "@/lib/wallet.functions";
 import { useCurrency } from "@/lib/currency-context";
 import { formatRemainingDuration } from "@/lib/profit-reconciler";
 import { Card } from "@/components/ui/card";
@@ -179,6 +181,7 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
   const { user } = useAuth();
   const { mode } = useAccountMode();
   const qc = useQueryClient();
+  const subscribeCopy = useAuthedServerFn(subscribeCopyTraderServerFn);
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(String(tier.required_capital));
   const [busy, setBusy] = useState(false);
@@ -204,57 +207,13 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
     }
     setBusy(true);
     try {
-      let rpcError: any = null;
-      try {
-        const { error } = await supabase.rpc(
-          "subscribe_copy_trader" as never,
-          {
-            _tier_id: tier.id,
-            _allocated_amount: usd,
-          } as never,
-        );
-        if (error) rpcError = error;
-      } catch (e) {
-        rpcError = e;
-      }
-
-      if (rpcError) {
-        console.warn("[subscribe_copy_trader RPC failed, performing client fallback]", rpcError);
-        const balanceCol = mode === "demo" ? "demo_balance" : "live_balance";
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select(balanceCol)
-          .eq("id", user!.id)
-          .single();
-        const currentBal = Number((prof as any)?.[balanceCol] ?? 0);
-        if (currentBal < usd) throw new Error("Insufficient balance");
-
-        const newBal = currentBal - usd;
-        const { error: balErr } = await supabase
-          .from("profiles")
-          .update({ [balanceCol]: newBal } as never)
-          .eq("id", user!.id);
-        if (balErr) throw balErr;
-
-        const { error: copyErr } = await supabase.from("user_copy_allocations").insert({
-          user_id: user!.id,
-          tier_id: tier.id,
-          allocated_amount: usd,
-          current_profit: 0,
-          status: "active",
-          account_mode: mode,
-        } as never);
-        if (copyErr) throw copyErr;
-
-        await supabase.from("transactions").insert({
-          user_id: user!.id,
-          type: "copy_trade",
-          amount: usd,
-          asset_name: `Copy Trading: ${tier.tier_name}`,
-          status: "completed",
-          account_mode: mode,
-        } as never);
-      }
+      await subscribeCopy({
+        data: {
+          tierId: tier.id,
+          allocatedAmount: usd,
+          mode,
+        },
+      });
 
       toast.success(`Copy trading activated with ${tier.tier_name}!`);
       qc.invalidateQueries({ queryKey: ["my_copy_allocations"] });

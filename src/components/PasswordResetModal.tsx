@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getAccessToken } from "@/lib/auth-token";
 import { saveSecurityQuestions } from "@/lib/security.functions";
 import {
   Dialog,
@@ -298,9 +299,11 @@ export function SetSecurityQuestionsModal({
 
     setSaving(true);
     try {
-      // 1. Try resilient server function using service role
+      const accessToken = await getAccessToken();
+      // 1. Try resilient server function using verified JWT
       const res = await saveSecurityQuestions({
         data: {
+          accessToken,
           userId,
           question_1: q1,
           answer_1: a1,

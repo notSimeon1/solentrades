@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { activateBotServerFn } from "@/lib/bot.functions";
+import { useAuthedServerFn } from "@/lib/auth-token";
 import { formatRemainingDuration } from "@/lib/profit-reconciler";
 import { useAuth } from "@/lib/auth-context";
 import { useAccountMode } from "@/lib/account-mode-context";
@@ -207,6 +208,7 @@ function BotCard({
   const { user } = useAuth();
   const { fiatLiveBalance } = useAccountMode();
   const qc = useQueryClient();
+  const activateBot = useAuthedServerFn(activateBotServerFn);
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(String(bot.capital_required));
   const [currencyPool, setCurrencyPool] = useState<"USD" | "USDT">("USD");
@@ -276,10 +278,8 @@ function BotCard({
 
     setBusy(true);
     try {
-      // 1. Call server function using service role
-      const res = await activateBotServerFn({
+      const res = await activateBot({
         data: {
-          userId: user!.id,
           botId: bot.id,
           amount: usd,
           mode,
@@ -287,92 +287,9 @@ function BotCard({
         },
       });
 
-      if (res) {
-        if (res.success) {
-          toast.success(`${bot.name} activated! Payouts will accrue automatically.`);
-          qc.invalidateQueries({ queryKey: ["my_active_bots"] });
-          qc.invalidateQueries({ queryKey: ["profile"] });
-          qc.invalidateQueries({ queryKey: ["transactions"] });
-          setOpen(false);
-          return;
-        } else {
-          throw new Error(res.message);
-        }
+      if (!res?.success) {
+        throw new Error(res?.message || "Bot activation failed");
       }
-
-      // 2. Fallback to client insert with strict schema matching if serverFn is unreachable
-      const balanceCol = mode === "demo" ? "demo_balance" : "live_balance";
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select(`${balanceCol}, crypto_balances`)
-        .eq("id", user!.id)
-        .single();
-
-      let currentBal = 0;
-      if (mode === "demo") {
-        currentBal = Number((prof as any)?.demo_balance ?? 10000);
-      } else if (currencyPool === "USDT") {
-        currentBal = Number((prof as any)?.crypto_balances?.USDT ?? 0);
-      } else {
-        currentBal = Number((prof as any)?.live_balance ?? 0);
-      }
-
-      if (currentBal < usd) {
-        console.error(
-          `[AI Trading Bot Execution Error] Failed transaction attempt due to insufficient liquidity! User: ${user!.id}, Pool: ${currencyPool}, Required: ${usd}, Available: ${currentBal}`,
-        );
-        throw new Error(
-          `Insufficient liquidity in ${currencyPool} pool. Available: $${currentBal.toFixed(2)}`,
-        );
-      }
-
-      const newBal = currentBal - usd;
-      if (mode === "demo") {
-        await supabase
-          .from("profiles")
-          .update({ demo_balance: newBal } as never)
-          .eq("id", user!.id);
-      } else if (currencyPool === "USDT") {
-        const curCrypto = (prof as any)?.crypto_balances ?? {};
-        await supabase
-          .from("profiles")
-          .update({ crypto_balances: { ...curCrypto, USDT: newBal } } as never)
-          .eq("id", user!.id);
-      } else {
-        await supabase
-          .from("profiles")
-          .update({
-            live_balance: newBal,
-            account_balance: newBal,
-            available_cash: newBal,
-          } as never)
-          .eq("id", user!.id);
-      }
-
-      const durationDays = Math.max(1, Number(bot.duration_days ?? 30));
-      const nowIso = new Date().toISOString();
-      const { error: botErr } = await supabase.from("user_active_bots").insert({
-        user_id: user!.id,
-        bot_id: bot.id,
-        invested_amount: usd,
-        activation_date: nowIso,
-        expiration_date: new Date(Date.now() + durationDays * 86400 * 1000).toISOString(),
-        last_payout_at: nowIso,
-        current_profit: 0,
-        status: "active",
-        account_mode: mode,
-      } as never);
-
-      if (botErr) throw botErr;
-
-      await supabase.from("transactions").insert({
-        user_id: user!.id,
-        type: "bot_activation",
-        amount: usd,
-        asset_name: `Activated AI Bot: ${bot.name} (${currencyPool})`,
-        status: "completed",
-        account_mode: mode,
-      } as never);
 
       toast.success(`${bot.name} activated! Payouts will accrue automatically.`);
       qc.invalidateQueries({ queryKey: ["my_active_bots"] });

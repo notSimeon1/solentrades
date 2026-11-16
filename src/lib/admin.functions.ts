@@ -81,9 +81,11 @@ const platformSettingSchema = z.object({
   category: z.string().max(60).optional(),
 });
 
-export const getAdminOverview = createServerFn({ method: "GET" }).handler(async ({ context }) =>
-  adminGetOverview(context?.userId || "admin"),
-);
+export const getAdminOverview = createServerFn({ method: "POST" })
+  .validator((input?: { accessToken?: string }) => input)
+  .handler(async ({ data, context }) =>
+    adminGetOverview(context?.userId || "admin", data?.accessToken),
+  );
 
 export const decideAdminDeposit = createServerFn({ method: "POST" })
   .validator((input) => decisionSchema.parse(input))
@@ -182,9 +184,11 @@ export const closePosition = createServerFn({ method: "POST" })
     closeUserPosition(context?.userId || "admin", data.id, data.closePrice),
   );
 
-export const getPlatformSettings = createServerFn({ method: "GET" }).handler(async ({ context }) =>
-  adminGetPlatformSettings(context?.userId || "admin"),
-);
+export const getPlatformSettings = createServerFn({ method: "POST" })
+  .validator((input?: { accessToken?: string }) => input)
+  .handler(async ({ data, context }) =>
+    adminGetPlatformSettings(context?.userId || "admin", data?.accessToken),
+  );
 
 export const savePlatformSetting = createServerFn({ method: "POST" })
   .validator((input) => platformSettingSchema.parse(input))

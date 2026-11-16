@@ -160,7 +160,11 @@ function AdminPage() {
 
   const overviewQuery = useQuery({
     queryKey: ["admin_overview", user?.id],
-    queryFn: () => fetchOverview(),
+    queryFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      return fetchOverview({ data: { accessToken } });
+    },
     enabled: isAdmin === true,
     refetchInterval: 6000,
     retry: false,
@@ -2917,7 +2921,11 @@ function SettingsTab({
     refetch: refetchPlatform,
   } = useQuery<PlatformRow[]>({
     queryKey: ["admin_platform_settings"],
-    queryFn: () => fetchPlatform(),
+    queryFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      return fetchPlatform({ data: { accessToken } });
+    },
     staleTime: 30_000,
   });
 

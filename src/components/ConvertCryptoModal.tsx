@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { useAuthedServerFn } from "@/lib/auth-token";
+import { convertCryptoToCashServerFn } from "@/lib/wallet.functions";
 import { useCurrency } from "@/lib/currency-context";
 import { useBinancePrices } from "@/hooks/useBinancePrices";
 import { soundFX } from "@/lib/sound-engine";
@@ -24,11 +26,7 @@ import {
 } from "@/components/ui/select";
 import { RefreshCw, Sparkles, DollarSign, ArrowRight } from "lucide-react";
 import { CryptoIcon } from "@/components/CryptoIcon";
-import {
-  computeEnrichedCryptoAssets,
-  CRYPTO_PRICE_SYMBOLS,
-  SUPPORTED_CRYPTO_ASSETS,
-} from "@/lib/crypto-assets";
+import { computeEnrichedCryptoAssets, CRYPTO_PRICE_SYMBOLS } from "@/lib/crypto-assets";
 
 interface ConvertCryptoModalProps {
   open: boolean;
@@ -44,6 +42,7 @@ export function ConvertCryptoModal({
   const { user } = useAuth();
   const { formatCurrency } = useCurrency();
   const qc = useQueryClient();
+  const runConvert = useAuthedServerFn(convertCryptoToCashServerFn);
   const { tickers } = useBinancePrices(CRYPTO_PRICE_SYMBOLS);
   const [selectedSymbol, setSelectedSymbol] = useState<string>(defaultSymbol);
   const [isConverting, setIsConverting] = useState(false);
@@ -120,97 +119,19 @@ export function ConvertCryptoModal({
     soundFX.triggerHaptic(30);
 
     try {
-      // 1. Fetch freshest profile state for atomic cash balance addition
-      const { data: freshProfile, error: fetchErr } = await supabase
-        .from("profiles")
-        .select("available_cash, live_balance, account_balance, crypto_balances")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (fetchErr) throw fetchErr;
-
-      const currentCash = Number(
-        freshProfile?.available_cash ??
-          freshProfile?.live_balance ??
-          freshProfile?.account_balance ??
-          0,
-      );
-      const newCash = Number((currentCash + totalUsdToCredit).toFixed(2));
-
-      const updatedJson = {
-        ...(((freshProfile as { crypto_balances?: Record<string, number> })?.crypto_balances ??
-          {}) as Record<string, number>),
-      };
-
-      // 2. Debit the converted crypto assets from user_crypto_balances and profiles.crypto_balances
-      if (selectedSymbol === "ALL") {
-        // Zero all supported crypto balances
-        for (const meta of SUPPORTED_CRYPTO_ASSETS) {
-          await supabase.from("user_crypto_balances").upsert(
-            {
-              user_id: user.id,
-              asset_symbol: meta.symbol,
-              balance: 0,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id,asset_symbol" },
-          );
-          updatedJson[meta.symbol] = 0;
-          updatedJson[meta.symbol.toLowerCase()] = 0;
-        }
-      } else {
-        // Zero the specific selected asset
-        for (const item of conversionItems) {
-          await supabase.from("user_crypto_balances").upsert(
-            {
-              user_id: user.id,
-              asset_symbol: item.symbol,
-              balance: 0,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id,asset_symbol" },
-          );
-          updatedJson[item.symbol] = 0;
-          updatedJson[item.symbol.toLowerCase()] = 0;
-        }
-      }
-
-      // 3. Update profiles table: Credit Cash Balance and update crypto_balances
-      const { error: profErr } = await supabase
-        .from("profiles")
-        .update({
-          available_cash: newCash,
-          account_balance: newCash,
-          live_balance: newCash,
-          crypto_balances: updatedJson as any,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
-
-      if (profErr) throw profErr;
-
-      // 4. Record transaction log in transactions table
-      const desc =
-        conversionItems.length === 1
-          ? `Converted ${conversionItems[0].qty.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${conversionItems[0].symbol} to ${formatCurrency(totalUsdToCredit)} Cash Balance`
-          : `Converted crypto holdings (${conversionItems.map((c) => `${c.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${c.symbol}`).join(", ")}) to ${formatCurrency(totalUsdToCredit)} Cash Balance`;
-
-      await supabase.from("transactions").insert({
-        user_id: user.id,
-        type: "swap",
-        amount: totalUsdToCredit,
-        description: desc,
-        status: "approved",
+      const res = await runConvert({
+        data: {
+          symbol: selectedSymbol || "ALL",
+        },
       });
 
       soundFX.playDepositBonus();
       soundFX.triggerHaptic(80);
 
       toast.success(
-        `Successfully converted crypto to ${formatCurrency(totalUsdToCredit)} Cash Balance!`,
+        `Successfully converted crypto to ${formatCurrency(Number(res.totalUsd ?? totalUsdToCredit))} Cash Balance!`,
       );
 
-      // 5. Invalidate caches so UI across all screens immediately reflects the change
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["my_crypto_wallets"] });
       qc.invalidateQueries({ queryKey: ["user_profile_navbar"] });

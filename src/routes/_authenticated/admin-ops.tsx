@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { useAuthedServerFn } from "@/lib/auth-token";
 import { clearAllAdminBalances } from "@/lib/admin.functions";
 
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
@@ -858,13 +859,14 @@ function PaymentsTab() {
 
 function ClearBalancesCard() {
   const qc = useQueryClient();
+  const clearAllBalances = useAuthedServerFn(clearAllAdminBalances);
   const [clearing, setClearing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleClear = async () => {
     setClearing(true);
     try {
-      const res = await clearAllAdminBalances();
+      const res = await clearAllBalances();
       toast.success(res.message ?? "All user balances cleared!");
       setConfirmOpen(false);
       qc.invalidateQueries();

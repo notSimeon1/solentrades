@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { useAuthedServerFn } from "@/lib/auth-token";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -160,7 +160,7 @@ function CoinCard({ sym, ticker: t }: { sym: string; ticker: any }) {
   const { mode, balance } = useAccountMode();
   const { formatPrice } = useCurrency();
   const qc = useQueryClient();
-  const openPositionFn = useServerFn(openPosition);
+  const openPositionFn = useAuthedServerFn(openPosition);
 
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("300");

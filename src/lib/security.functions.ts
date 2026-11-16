@@ -1,10 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { requireVerifiedUser } from "./server-auth";
 
 export const saveSecurityQuestions = createServerFn({ method: "POST" })
   .validator(
     (data: {
-      userId: string;
+      accessToken: string;
+      userId?: string;
       question_1: string;
       answer_1: string;
       question_2: string;
@@ -13,9 +15,10 @@ export const saveSecurityQuestions = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     try {
+      const caller = await requireVerifiedUser(data.accessToken);
       const { error } = await supabaseAdmin.from("user_security_answers" as any).upsert(
         {
-          user_id: data.userId,
+          user_id: caller.userId,
           question_1: data.question_1,
           answer_1: data.answer_1.trim().toLowerCase(),
           question_2: data.question_2,

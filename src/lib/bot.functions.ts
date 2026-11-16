@@ -1,11 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { reconcilePositions } from "@/lib/profit-reconciler";
+import { requireVerifiedUser } from "./server-auth";
 
 export const activateBotServerFn = createServerFn({ method: "POST" })
   .validator(
     (data: {
-      userId: string;
+      accessToken: string;
+      userId?: string;
       botId: string;
       amount: number;
       mode: "demo" | "live";
@@ -14,6 +16,8 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     try {
+      const caller = await requireVerifiedUser(data.accessToken);
+      const authUserId = caller.userId;
       const pool = data.currencyPool ?? "USD";
 
       // 1. Fetch bot definition
@@ -39,7 +43,7 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
       const { data: prof, error: profErr } = await supabaseAdmin
         .from("profiles" as any)
         .select("id, live_balance, account_balance, available_cash, demo_balance, crypto_balances")
-        .eq("id", data.userId)
+        .eq("id", authUserId)
         .single();
 
       if (profErr || !prof) {
@@ -55,7 +59,7 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
         const { data: cryptoRow } = await supabaseAdmin
           .from("user_crypto_balances")
           .select("balance")
-          .eq("user_id", data.userId)
+          .eq("user_id", authUserId)
           .eq("asset_symbol", "USDT")
           .maybeSingle();
 
@@ -76,12 +80,12 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
 
         // Explicit Error Logging for failed transaction attempt due to insufficient liquidity
         console.error(
-          `[AI Trading Bot Execution Error] Failed transaction attempt due to insufficient liquidity! User ID: ${data.userId}, Bot: ${botData.name}, Mode: ${data.mode}, Currency Pool: ${pool}, Required: ${data.amount}, Available: ${availableBalance}`,
+          `[AI Trading Bot Execution Error] Failed transaction attempt due to insufficient liquidity! User ID: ${authUserId}, Bot: ${botData.name}, Mode: ${data.mode}, Currency Pool: ${pool}, Required: ${data.amount}, Available: ${availableBalance}`,
         );
 
         // Record failed transaction attempt for auditability
         await supabaseAdmin.from("transactions" as any).insert({
-          user_id: data.userId,
+          user_id: authUserId,
           type: "bot_activation",
           amount: data.amount,
           asset_name: `Failed AI Bot (${botData.name}): Insufficient ${pool} Liquidity`,
@@ -101,7 +105,7 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
         const { error: updateBalErr } = await supabaseAdmin
           .from("profiles" as any)
           .update(updatePayload)
-          .eq("id", data.userId);
+          .eq("id", authUserId);
 
         if (updateBalErr) throw new Error("Failed to deduct demo balance.");
       } else if (pool === "USDT") {
@@ -112,11 +116,11 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
         await supabaseAdmin
           .from("profiles" as any)
           .update({ crypto_balances: updatedJson, updated_at: new Date().toISOString() })
-          .eq("id", data.userId);
+          .eq("id", authUserId);
 
         await supabaseAdmin.from("user_crypto_balances").upsert(
           {
-            user_id: data.userId,
+            user_id: authUserId,
             asset_symbol: "USDT",
             balance: Number(newBalance.toFixed(6)),
             updated_at: new Date().toISOString(),
@@ -132,7 +136,7 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
         const { error: updateBalErr } = await supabaseAdmin
           .from("profiles" as any)
           .update(updatePayload)
-          .eq("id", data.userId);
+          .eq("id", authUserId);
 
         if (updateBalErr) throw new Error("Failed to deduct USD live balance.");
       }
@@ -151,7 +155,7 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
       // 5. Insert active bot record with clean schema-matching columns
       const nowIso = new Date().toISOString();
       const cleanBotPayload = {
-        user_id: data.userId,
+        user_id: authUserId,
         bot_id: data.botId,
         invested_amount: data.amount,
         activation_date: nowIso,
@@ -176,17 +180,17 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
           await supabaseAdmin
             .from("profiles" as any)
             .update({ demo_balance: availableBalance })
-            .eq("id", data.userId);
+            .eq("id", authUserId);
         } else if (pool === "USDT") {
           const currentJson = ((prof as any)?.crypto_balances ?? {}) as Record<string, number>;
           await supabaseAdmin
             .from("profiles" as any)
             .update({ crypto_balances: { ...currentJson, USDT: availableBalance } })
-            .eq("id", data.userId);
+            .eq("id", authUserId);
           await supabaseAdmin
             .from("user_crypto_balances")
             .upsert(
-              { user_id: data.userId, asset_symbol: "USDT", balance: availableBalance },
+              { user_id: authUserId, asset_symbol: "USDT", balance: availableBalance },
               { onConflict: "user_id,asset_symbol" },
             );
         } else {
@@ -197,7 +201,7 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
               account_balance: availableBalance,
               available_cash: availableBalance,
             })
-            .eq("id", data.userId);
+            .eq("id", authUserId);
         }
 
         return { success: false, message: `Bot activation failed: ${botErr.message}` };
@@ -205,7 +209,7 @@ export const activateBotServerFn = createServerFn({ method: "POST" })
 
       // 6. Record transaction
       await supabaseAdmin.from("transactions" as any).insert({
-        user_id: data.userId,
+        user_id: authUserId,
         type: "bot_activation",
         amount: data.amount,
         asset_name: `Activated AI Bot: ${botData.name} (${pool})`,

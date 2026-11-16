@@ -1,4 +1,38 @@
+import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import type { Database } from "@/integrations/supabase/types";
+
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  "https://dmfdovwiczhpnqlykjix.supabase.co";
+const SUPABASE_ANON_KEY =
+  process.env.SUPABASE_PUBLISHABLE_KEY ||
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtZmRvdndpY3pocG5xbHlraml4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1MzA1OTMsImV4cCI6MjEwMTEwNjU5M30.Hho5fwB9yPk_cCTAAfN9wD_yxGZIMkPagArg_RuQFXE";
+
+function hasServiceRoleKey(): boolean {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) return false;
+  try {
+    const parts = key.split(".");
+    if (parts.length < 2) return false;
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    return payload?.role === "service_role";
+  } catch {
+    return false;
+  }
+}
+
+function getAdminReadClient(accessToken?: string) {
+  if (hasServiceRoleKey() || !accessToken) return supabaseAdmin;
+  return createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+  });
+}
 
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
 const DEFAULT_FEE_WALLET = "0x8B911165295C78935F53753e9D8DBC566104C514";
@@ -219,9 +253,12 @@ async function ensureBayoIsAdmin() {
   }
 }
 
-export async function adminGetOverview(userId: string) {
+export async function adminGetOverview(userId: string, accessToken?: string) {
   await assertOwner(userId);
-  await ensureBayoIsAdmin();
+  if (hasServiceRoleKey()) {
+    await ensureBayoIsAdmin();
+  }
+  const db = getAdminReadClient(accessToken);
   const [
     profilesRes,
     depositsRes,
@@ -234,28 +271,16 @@ export async function adminGetOverview(userId: string) {
     positionsRes,
     newsRes,
   ] = await Promise.all([
-    supabaseAdmin.from("profiles").select("*").order("created_at", { ascending: false }),
-    supabaseAdmin.from("deposits").select("*").order("created_at", { ascending: false }),
-    supabaseAdmin.from("withdrawals").select("*").order("created_at", { ascending: false }),
-    supabaseAdmin.from("complaints").select("*").order("created_at", { ascending: false }),
-    supabaseAdmin.from("app_settings").select("*").not("key", "like", "presence:%"),
-    supabaseAdmin
-      .from("transactions")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(300),
-    supabaseAdmin.from("kyc_submissions").select("*").order("created_at", { ascending: false }),
-    supabaseAdmin.from("referral_earnings").select("*").order("created_at", { ascending: false }),
-    supabaseAdmin
-      .from("live_positions")
-      .select("*")
-      .order("opened_at", { ascending: false })
-      .limit(200),
-    supabaseAdmin
-      .from("market_news")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50),
+    db.from("profiles").select("*").order("created_at", { ascending: false }),
+    db.from("deposits").select("*").order("created_at", { ascending: false }),
+    db.from("withdrawals").select("*").order("created_at", { ascending: false }),
+    db.from("complaints").select("*").order("created_at", { ascending: false }),
+    db.from("app_settings").select("*").not("key", "like", "presence:%"),
+    db.from("transactions").select("*").order("created_at", { ascending: false }).limit(300),
+    db.from("kyc_submissions").select("*").order("created_at", { ascending: false }),
+    db.from("referral_earnings").select("*").order("created_at", { ascending: false }),
+    db.from("live_positions").select("*").order("opened_at", { ascending: false }).limit(200),
+    db.from("market_news").select("*").order("created_at", { ascending: false }).limit(50),
   ]);
 
   for (const res of [
@@ -299,7 +324,7 @@ export async function adminGetOverview(userId: string) {
   }
 
   // Fetch all user crypto balances to compute exact crypto USD value for each user
-  const { data: allCryptoBalances } = await supabaseAdmin
+  const { data: allCryptoBalances } = await db
     .from("user_crypto_balances")
     .select("user_id, asset_symbol, balance");
 
@@ -1136,9 +1161,10 @@ async function getPlatformNumeric(key: string, fallback: number): Promise<number
 }
 
 /** Return all platform settings as { id, category, key_name, value (string), description } */
-export async function adminGetPlatformSettings(userId: string) {
+export async function adminGetPlatformSettings(userId: string, accessToken?: string) {
   await assertOwner(userId);
-  const { data, error } = await supabaseAdmin
+  const db = getAdminReadClient(accessToken);
+  const { data, error } = await db
     .from("platform_settings")
     .select("id, category, key_name, value, description")
     .order("category")

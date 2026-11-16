@@ -21,15 +21,18 @@ import { Route as AuthenticatedAdminOpsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedAiBotsRouteImport } from './routes/_authenticated/ai-bots'
 import { Route as AuthenticatedAnnouncementsRouteImport } from './routes/_authenticated/announcements'
 import { Route as AuthenticatedAssetsRouteImport } from './routes/_authenticated/assets'
-import { Route as AuthenticatedBuyBitcoinRouteImport } from './routes/_authenticated/buy-bitcoin'
+import { Route as AuthenticatedBuyXrpRouteImport } from './routes/_authenticated/buy-xrp'
 import { Route as AuthenticatedCopyTradingRouteImport } from './routes/_authenticated/copy-trading'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDepositRouteImport } from './routes/_authenticated/deposit'
 import { Route as AuthenticatedKycRouteImport } from './routes/_authenticated/kyc'
+import { Route as AuthenticatedLeaderboardRouteImport } from './routes/_authenticated/leaderboard'
 import { Route as AuthenticatedMarketRouteImport } from './routes/_authenticated/market'
 import { Route as AuthenticatedPreMarketRouteImport } from './routes/_authenticated/pre-market'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
 import { Route as AuthenticatedSignalsRouteImport } from './routes/_authenticated/signals'
+import { Route as AuthenticatedSwapRouteImport } from './routes/_authenticated/swap'
 import { Route as AuthenticatedTradeRouteImport } from './routes/_authenticated/trade'
 import { Route as AuthenticatedTransactionsRouteImport } from './routes/_authenticated/transactions'
 import { Route as AuthenticatedWithdrawRouteImport } from './routes/_authenticated/withdraw'
@@ -98,9 +101,9 @@ const AuthenticatedAssetsRoute = AuthenticatedAssetsRouteImport.update({
   path: '/assets',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedBuyBitcoinRoute = AuthenticatedBuyBitcoinRouteImport.update({
-  id: '/buy-bitcoin',
-  path: '/buy-bitcoin',
+const AuthenticatedBuyXrpRoute = AuthenticatedBuyXrpRouteImport.update({
+  id: '/buy-xrp',
+  path: '/buy-xrp',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedCopyTradingRoute =
@@ -124,6 +127,12 @@ const AuthenticatedKycRoute = AuthenticatedKycRouteImport.update({
   path: '/kyc',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedLeaderboardRoute =
+  AuthenticatedLeaderboardRouteImport.update({
+    id: '/leaderboard',
+    path: '/leaderboard',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedMarketRoute = AuthenticatedMarketRouteImport.update({
   id: '/market',
   path: '/market',
@@ -134,6 +143,11 @@ const AuthenticatedPreMarketRoute = AuthenticatedPreMarketRouteImport.update({
   path: '/pre-market',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedReferralsRoute = AuthenticatedReferralsRouteImport.update({
   id: '/referrals',
   path: '/referrals',
@@ -142,6 +156,11 @@ const AuthenticatedReferralsRoute = AuthenticatedReferralsRouteImport.update({
 const AuthenticatedSignalsRoute = AuthenticatedSignalsRouteImport.update({
   id: '/signals',
   path: '/signals',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedSwapRoute = AuthenticatedSwapRouteImport.update({
+  id: '/swap',
+  path: '/swap',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedTradeRoute = AuthenticatedTradeRouteImport.update({
@@ -184,15 +203,18 @@ export interface FileRoutesByFullPath {
   '/ai-bots': typeof AuthenticatedAiBotsRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
   '/assets': typeof AuthenticatedAssetsRoute
-  '/buy-bitcoin': typeof AuthenticatedBuyBitcoinRoute
+  '/buy-xrp': typeof AuthenticatedBuyXrpRoute
   '/copy-trading': typeof AuthenticatedCopyTradingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/deposit': typeof AuthenticatedDepositRoute
   '/kyc': typeof AuthenticatedKycRoute
+  '/leaderboard': typeof AuthenticatedLeaderboardRoute
   '/market': typeof AuthenticatedMarketRoute
   '/pre-market': typeof AuthenticatedPreMarketRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/signals': typeof AuthenticatedSignalsRoute
+  '/swap': typeof AuthenticatedSwapRoute
   '/trade': typeof AuthenticatedTradeRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
   '/withdraw': typeof AuthenticatedWithdrawRoute
@@ -211,15 +233,18 @@ export interface FileRoutesByTo {
   '/ai-bots': typeof AuthenticatedAiBotsRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
   '/assets': typeof AuthenticatedAssetsRoute
-  '/buy-bitcoin': typeof AuthenticatedBuyBitcoinRoute
+  '/buy-xrp': typeof AuthenticatedBuyXrpRoute
   '/copy-trading': typeof AuthenticatedCopyTradingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/deposit': typeof AuthenticatedDepositRoute
   '/kyc': typeof AuthenticatedKycRoute
+  '/leaderboard': typeof AuthenticatedLeaderboardRoute
   '/market': typeof AuthenticatedMarketRoute
   '/pre-market': typeof AuthenticatedPreMarketRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/signals': typeof AuthenticatedSignalsRoute
+  '/swap': typeof AuthenticatedSwapRoute
   '/trade': typeof AuthenticatedTradeRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
   '/withdraw': typeof AuthenticatedWithdrawRoute
@@ -240,15 +265,18 @@ export interface FileRoutesById {
   '/_authenticated/ai-bots': typeof AuthenticatedAiBotsRoute
   '/_authenticated/announcements': typeof AuthenticatedAnnouncementsRoute
   '/_authenticated/assets': typeof AuthenticatedAssetsRoute
-  '/_authenticated/buy-bitcoin': typeof AuthenticatedBuyBitcoinRoute
+  '/_authenticated/buy-xrp': typeof AuthenticatedBuyXrpRoute
   '/_authenticated/copy-trading': typeof AuthenticatedCopyTradingRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/deposit': typeof AuthenticatedDepositRoute
   '/_authenticated/kyc': typeof AuthenticatedKycRoute
+  '/_authenticated/leaderboard': typeof AuthenticatedLeaderboardRoute
   '/_authenticated/market': typeof AuthenticatedMarketRoute
   '/_authenticated/pre-market': typeof AuthenticatedPreMarketRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
   '/_authenticated/signals': typeof AuthenticatedSignalsRoute
+  '/_authenticated/swap': typeof AuthenticatedSwapRoute
   '/_authenticated/trade': typeof AuthenticatedTradeRoute
   '/_authenticated/transactions': typeof AuthenticatedTransactionsRoute
   '/_authenticated/withdraw': typeof AuthenticatedWithdrawRoute
@@ -269,15 +297,18 @@ export interface FileRouteTypes {
     | '/ai-bots'
     | '/announcements'
     | '/assets'
-    | '/buy-bitcoin'
+    | '/buy-xrp'
     | '/copy-trading'
     | '/dashboard'
     | '/deposit'
     | '/kyc'
+    | '/leaderboard'
     | '/market'
     | '/pre-market'
+    | '/profile'
     | '/referrals'
     | '/signals'
+    | '/swap'
     | '/trade'
     | '/transactions'
     | '/withdraw'
@@ -296,15 +327,18 @@ export interface FileRouteTypes {
     | '/ai-bots'
     | '/announcements'
     | '/assets'
-    | '/buy-bitcoin'
+    | '/buy-xrp'
     | '/copy-trading'
     | '/dashboard'
     | '/deposit'
     | '/kyc'
+    | '/leaderboard'
     | '/market'
     | '/pre-market'
+    | '/profile'
     | '/referrals'
     | '/signals'
+    | '/swap'
     | '/trade'
     | '/transactions'
     | '/withdraw'
@@ -324,15 +358,18 @@ export interface FileRouteTypes {
     | '/_authenticated/ai-bots'
     | '/_authenticated/announcements'
     | '/_authenticated/assets'
-    | '/_authenticated/buy-bitcoin'
+    | '/_authenticated/buy-xrp'
     | '/_authenticated/copy-trading'
     | '/_authenticated/dashboard'
     | '/_authenticated/deposit'
     | '/_authenticated/kyc'
+    | '/_authenticated/leaderboard'
     | '/_authenticated/market'
     | '/_authenticated/pre-market'
+    | '/_authenticated/profile'
     | '/_authenticated/referrals'
     | '/_authenticated/signals'
+    | '/_authenticated/swap'
     | '/_authenticated/trade'
     | '/_authenticated/transactions'
     | '/_authenticated/withdraw'
@@ -438,11 +475,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAssetsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/buy-bitcoin': {
-      id: '/_authenticated/buy-bitcoin'
-      path: '/buy-bitcoin'
-      fullPath: '/buy-bitcoin'
-      preLoaderRoute: typeof AuthenticatedBuyBitcoinRouteImport
+    '/_authenticated/buy-xrp': {
+      id: '/_authenticated/buy-xrp'
+      path: '/buy-xrp'
+      fullPath: '/buy-xrp'
+      preLoaderRoute: typeof AuthenticatedBuyXrpRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/copy-trading': {
@@ -473,6 +510,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedKycRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/leaderboard': {
+      id: '/_authenticated/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/leaderboard'
+      preLoaderRoute: typeof AuthenticatedLeaderboardRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/market': {
       id: '/_authenticated/market'
       path: '/market'
@@ -487,6 +531,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPreMarketRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/referrals': {
       id: '/_authenticated/referrals'
       path: '/referrals'
@@ -499,6 +550,13 @@ declare module '@tanstack/react-router' {
       path: '/signals'
       fullPath: '/signals'
       preLoaderRoute: typeof AuthenticatedSignalsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/swap': {
+      id: '/_authenticated/swap'
+      path: '/swap'
+      fullPath: '/swap'
+      preLoaderRoute: typeof AuthenticatedSwapRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/trade': {
@@ -545,15 +603,18 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAiBotsRoute: typeof AuthenticatedAiBotsRoute
   AuthenticatedAnnouncementsRoute: typeof AuthenticatedAnnouncementsRoute
   AuthenticatedAssetsRoute: typeof AuthenticatedAssetsRoute
-  AuthenticatedBuyBitcoinRoute: typeof AuthenticatedBuyBitcoinRoute
+  AuthenticatedBuyXrpRoute: typeof AuthenticatedBuyXrpRoute
   AuthenticatedCopyTradingRoute: typeof AuthenticatedCopyTradingRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDepositRoute: typeof AuthenticatedDepositRoute
   AuthenticatedKycRoute: typeof AuthenticatedKycRoute
+  AuthenticatedLeaderboardRoute: typeof AuthenticatedLeaderboardRoute
   AuthenticatedMarketRoute: typeof AuthenticatedMarketRoute
   AuthenticatedPreMarketRoute: typeof AuthenticatedPreMarketRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
   AuthenticatedSignalsRoute: typeof AuthenticatedSignalsRoute
+  AuthenticatedSwapRoute: typeof AuthenticatedSwapRoute
   AuthenticatedTradeRoute: typeof AuthenticatedTradeRoute
   AuthenticatedTransactionsRoute: typeof AuthenticatedTransactionsRoute
   AuthenticatedWithdrawRoute: typeof AuthenticatedWithdrawRoute
@@ -565,15 +626,18 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAiBotsRoute: AuthenticatedAiBotsRoute,
   AuthenticatedAnnouncementsRoute: AuthenticatedAnnouncementsRoute,
   AuthenticatedAssetsRoute: AuthenticatedAssetsRoute,
-  AuthenticatedBuyBitcoinRoute: AuthenticatedBuyBitcoinRoute,
+  AuthenticatedBuyXrpRoute: AuthenticatedBuyXrpRoute,
   AuthenticatedCopyTradingRoute: AuthenticatedCopyTradingRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDepositRoute: AuthenticatedDepositRoute,
   AuthenticatedKycRoute: AuthenticatedKycRoute,
+  AuthenticatedLeaderboardRoute: AuthenticatedLeaderboardRoute,
   AuthenticatedMarketRoute: AuthenticatedMarketRoute,
   AuthenticatedPreMarketRoute: AuthenticatedPreMarketRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
   AuthenticatedSignalsRoute: AuthenticatedSignalsRoute,
+  AuthenticatedSwapRoute: AuthenticatedSwapRoute,
   AuthenticatedTradeRoute: AuthenticatedTradeRoute,
   AuthenticatedTransactionsRoute: AuthenticatedTransactionsRoute,
   AuthenticatedWithdrawRoute: AuthenticatedWithdrawRoute,

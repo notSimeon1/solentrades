@@ -19,23 +19,13 @@ export interface UserPortfolioResult {
   isSuspended: boolean;
 }
 
+import { requireVerifiedUser } from "./server-auth";
+
 export const getUserAccountPortfolio = createServerFn({ method: "POST" })
-  .validator((input: { userId: string }) => input)
+  .validator((input: { accessToken: string; userId?: string }) => input)
   .handler(async ({ data }): Promise<UserPortfolioResult> => {
-    const { userId } = data;
-    if (!userId) {
-      return {
-        userId: "",
-        accountMode: "demo",
-        cashBalance: 0,
-        demoBalance: 10000,
-        cryptoUsdBalance: 0,
-        totalLiveBalance: 0,
-        cryptoBalances: {},
-        cryptoRows: [],
-        isSuspended: false,
-      };
-    }
+    const caller = await requireVerifiedUser(data.accessToken);
+    const userId = caller.userId;
 
     try {
       const [profRes, cryptoRowsRes] = await Promise.all([
