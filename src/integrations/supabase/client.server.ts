@@ -3,6 +3,7 @@
 // Use this for admin operations in server functions and server routes only.
 // For user-authenticated queries (with RLS), use the auth middleware instead.
 import { createClient } from "@supabase/supabase-js";
+import { getRequest } from "@tanstack/react-start/server";
 import type { Database } from "./types";
 
 function createSupabaseAdminClient() {
@@ -19,6 +20,16 @@ function createSupabaseAdminClient() {
     process.env.VITE_SUPABASE_ANON_KEY ||
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtZmRvdndpY3pocG5xbHlraml4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1MzA1OTMsImV4cCI6MjEwMTEwNjU5M30.Hho5fwB9yPk_cCTAAfN9wD_yxGZIMkPagArg_RuQFXE";
 
+  let authHeader: string | undefined;
+  try {
+    const request = getRequest();
+    if (request?.headers) {
+      authHeader = request.headers.get("authorization") || undefined;
+    }
+  } catch (e) {
+    // Ignore if not in request context
+  }
+
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     const missing = [
       ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
@@ -30,6 +41,9 @@ function createSupabaseAdminClient() {
   }
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    global: {
+      headers: authHeader ? { Authorization: authHeader } : undefined,
+    },
     auth: {
       storage: undefined,
       persistSession: false,
